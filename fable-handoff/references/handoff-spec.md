@@ -36,14 +36,14 @@ structured.
 ## 2. The flow
 
 ```bash
-python3 scripts/preflight.py --project . --run-tests      # drafts fable/handoff_spec.json
-python3 scripts/spec_tool.py check --project .            # what is missing
+uv run --script scripts/preflight.py --project . --run-tests      # drafts fable/handoff_spec.json
+uv run --script scripts/spec_tool.py check --project .            # what is missing
 jq -L SKILL/assets/jq 'include "handoff"; summary' fable/handoff_spec.json
 #   ... complete the spec with the owner, check again until READY TO RENDER ...
-python3 scripts/init_handoff.py --project . --from-preflight --branch fable/my-job
-python3 scripts/render_handoff.py --project .             # writes the package
+uv run --script scripts/init_handoff.py --project . --from-preflight --branch fable/my-job
+uv run --script scripts/render_handoff.py --project .             # writes the package
 git switch -c fable/my-job && git add -A && git commit -m "Add handoff package"
-python3 scripts/readiness_check.py --project .
+uv run --script scripts/readiness_check.py --project .
 ```
 
 Preflight never overwrites an existing spec. When one exists, it writes its
@@ -145,7 +145,7 @@ jq --arg why "Finance reconciles by hand when an order is dropped, so a loud fai
     | .decisions += [{decision: "Staging uses SQLite", reason: "owner answer", source: "interview"}]
     | .run.max_budget_usd = 30' \
    fable/handoff_spec.json > fable/handoff_spec.tmp && mv fable/handoff_spec.tmp fable/handoff_spec.json
-python3 scripts/spec_tool.py check --project .
+uv run --script scripts/spec_tool.py check --project .
 ```
 
 Use `--arg` for strings and `--argjson` for numbers, booleans and objects, so
@@ -177,10 +177,10 @@ The owner approves the spec, not the rendered files, and approves it once it
 is complete:
 
 ```bash
-python3 scripts/spec_tool.py brief --project .      # writes fable/OWNER_BRIEF.md
+uv run --script scripts/spec_tool.py brief --project .      # writes fable/OWNER_BRIEF.md
 #   ... the owner reads it and says yes, or asks for changes ...
-python3 scripts/spec_tool.py signoff --project . --by "Jane Owner"
-python3 scripts/spec_tool.py status --project .     # OK, MISSING or STALE
+uv run --script scripts/spec_tool.py signoff --project . --by "Jane Owner"
+uv run --script scripts/spec_tool.py status --project .     # OK, MISSING or STALE
 ```
 
 The brief is one page: the job and why, how done is decided, what the run may

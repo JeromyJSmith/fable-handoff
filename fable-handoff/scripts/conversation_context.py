@@ -1,13 +1,13 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 # /// script
-# requires-python = ">=3.9"
+# requires-python = ">=3.11"
 # dependencies = []
 # ///
 """Rebuild a concise context document from Claude Code conversation logs.
 
-    python3 scripts/conversation_context.py --project . --project-logs
-    python3 scripts/conversation_context.py --project . --logs ~/.claude/projects/-Users-me-app/
-    python3 scripts/conversation_context.py --project . --logs a.jsonl b.jsonl --json
+    uv run --script scripts/conversation_context.py --project . --project-logs
+    uv run --script scripts/conversation_context.py --project . --logs ~/.claude/projects/-Users-me-app/
+    uv run --script scripts/conversation_context.py --project . --logs a.jsonl b.jsonl --json
 
 Reads one or more JSONL conversation logs: main sessions, resumed sessions,
 subagent logs with their .meta.json files, and print-mode stream-json output

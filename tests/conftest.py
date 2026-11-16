@@ -18,7 +18,10 @@ from pathlib import Path
 import pytest
 
 SKILL = Path(os.environ.get("FABLE_HANDOFF_SKILL_DIR", Path(__file__).resolve().parent.parent / "fable-handoff")).resolve()
-VERIFY = "python3 -m pytest -q -p no:cacheprovider app_tests"
+# The sample app's verify command. It runs pytest through uv so it never
+# depends on which `python3` happens to be first on PATH.
+VERIFY = "uv run --quiet --no-project --with pytest==8.4.2 pytest -q -p no:cacheprovider app_tests"
+UV_SCRIPT = ["uv", "run", "--quiet", "--script"]
 
 MISSION = textwrap.dedent(
     """\
@@ -102,7 +105,7 @@ def run(cmd, cwd=None, env=None, stdin=None, timeout=180):
 
 
 def script(name: str) -> list[str]:
-    return [sys.executable, str(SKILL / "scripts" / name)]
+    return [*UV_SCRIPT, str(SKILL / "scripts" / name)]
 
 
 def git(project: Path, *args: str):
@@ -144,7 +147,7 @@ def bare_project(tmp_path: Path, name: str = "proj") -> Path:
 
 
 def init(project: Path, *extra: str):
-    return run([*script("init_handoff.py"), "--project", str(project), "--verify-command", VERIFY, "--branch", "fable/run-1", "--max-budget-usd", "40", *extra])
+    return run([*script("init_handoff.py"), "--project", str(project), "--verify-command", VERIFY, "--branch", "fable/run-1", "--max-budget-usd", "40", "--apply-settings", *extra])
 
 
 def prepared_project(tmp_path: Path, name: str = "proj", **cfg_changes) -> Path:
@@ -181,7 +184,7 @@ def hook(project: Path, name: str, payload, env=None):
     full = {"CLAUDE_PROJECT_DIR": str(project)}
     if env:
         full.update(env)
-    return run([sys.executable, str(project / ".claude" / "hooks" / name)], cwd=project, env=full, stdin=stdin)
+    return run([*UV_SCRIPT, str(project / ".claude" / "hooks" / name)], cwd=project, env=full, stdin=stdin)
 
 
 def make_stub(tmp_path: Path, plan: list[str]) -> Path:

@@ -37,7 +37,7 @@ fable-handoff/
 ```
 
 All Python is standard library only, runs on Python 3.9+, and works with
-`python3 script.py` and `uv run script.py`. No em dashes anywhere in the skill.
+`uv run --script script.py` and `uv run script.py`. No em dashes anywhere in the skill.
 
 ## 3. What the skill installs in a project
 
@@ -158,11 +158,14 @@ publishing, SQL `DROP TABLE|DATABASE|SCHEMA`.
 
 - Creates the eleven files of section 3 (settings excluded). Existing files
   are left alone and listed as skipped unless `--force`.
-- Merges into `.claude/settings.json`, preserving every existing key, after
-  writing a backup `settings.json.bak-<timestamp>` when the file existed:
+- Shows the exact diff, and merges it into `.claude/settings.json` only with
+  `--apply-settings` or a yes at an interactive prompt (otherwise writes
+  `fable/settings.proposed.json` and leaves settings alone), preserving every
+  existing key, after writing a backup `settings.json.bak-<timestamp>` when the
+  file existed; `--uninstall` reverses it:
   a `PreToolUse` group with matcher `Bash|Write|Edit|MultiEdit|NotebookEdit`,
   a `Stop` group and a `SessionStart` group, each a command hook of the form
-  `python3 "${CLAUDE_PROJECT_DIR}/.claude/hooks/<name>"`; the Stop hook's
+  `uv run --quiet --script "${CLAUDE_PROJECT_DIR}/.claude/hooks/<name>"`; the Stop hook's
   `timeout` is the verify timeout plus 120; `permissions.deny` gains
   `Read(./.env)` and `Read(./.env.*)`. Running twice adds nothing twice.
 - Invalid JSON in existing settings: exit non-zero and leave the file as is.
@@ -365,7 +368,7 @@ missing report ("report").
 
 ## 14. Quality bar
 
-- The acceptance suite passes: `python3 -m pytest -q tests`.
+- The acceptance suite passes: `uv run pytest -q tests`.
 - A preparing agent that has never seen this project could follow SKILL.md
   and its references without asking anything.
 - Messages printed by hooks and scripts say what is wrong and what to do next.

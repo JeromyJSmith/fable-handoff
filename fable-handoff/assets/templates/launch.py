@@ -1,10 +1,14 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
 """Start the unattended run for this project and keep it going until it is finished.
 
 Usage, from the project root (the launcher finds the project from its own
 location, so any other directory works too):
-    python3 fable/launch.py --dry-run     show the command, start nothing
-    python3 fable/launch.py               start the run
+    uv run --script fable/launch.py --dry-run     show the command, start nothing
+    uv run --script fable/launch.py               start the run
 
 What it does:
 1. Refuses to start unless the readiness check passed for the current
@@ -24,6 +28,9 @@ Exit codes: 0 finished, 1 unfinished, 2 refused to start, 3 stopped on a
 blocker recorded in fable/BLOCKED.md.
 """
 from __future__ import annotations
+
+# Every script in this skill runs under uv, never a bare interpreter.
+UV_SCRIPT = ["uv", "run", "--quiet", "--script"]
 
 import argparse
 import hashlib
@@ -238,7 +245,7 @@ def mission_finished(config):
     env = dict(os.environ, FABLE_GATE_DRY_RUN="1", CLAUDE_PROJECT_DIR=str(PROJECT))
     timeout = (config.get("verify_timeout_seconds") or 1800) + 120
     try:
-        result = subprocess.run([sys.executable, str(gate)], input="{}", text=True, capture_output=True, cwd=PROJECT, env=env, timeout=timeout)
+        result = subprocess.run([*UV_SCRIPT, str(gate)], input="{}", text=True, capture_output=True, cwd=PROJECT, env=env, timeout=timeout)
     except subprocess.TimeoutExpired:
         return False
     return result.returncode == 0

@@ -1,6 +1,6 @@
 {
   "name": "fable-handoff",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Prepare a project for a long unattended Claude Fable 5.2 run, then launch, watch and review it.",
   "author": {"name": "Jeromy Smith", "url": "https://github.com/JeromyJSmith"},
   "homepage": "https://github.com/JeromyJSmith/fable-handoff",

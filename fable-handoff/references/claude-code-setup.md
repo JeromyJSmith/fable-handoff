@@ -146,7 +146,7 @@ are sent separately.
 
 The shell check reads the command as text. It cannot see what a script or an
 interpreter does once it runs. That includes code handed to an interpreter
-other than a shell, such as `python3 -c "..."` or a heredoc fed to `python3`:
+other than a shell, such as `uv run python -c "..."` or a heredoc fed to an interpreter:
 the guard reads it as data. It is a second layer behind the permission mode,
 not a sandbox. For real isolation, run in a container.
 
@@ -203,7 +203,7 @@ A project that was prepared with an older copy of the skill keeps the hooks
 and the launcher of that copy. To bring them up to date, run:
 
 ```bash
-python3 scripts/init_handoff.py --project /path/to/project --refresh-hooks
+uv run --script scripts/init_handoff.py --project /path/to/project --refresh-hooks
 ```
 
 This overwrites the three hook files and `fable/launch.py` with the skill's
@@ -237,12 +237,23 @@ Files that already exist are left alone and listed under `skipped_existing`
 in the JSON summary it prints. To update only the hooks and the launcher of
 an existing package, use `--refresh-hooks`, described at the end of section 3.
 
-It also merges into `.claude/settings.json` and keeps every key that was
-already there. It adds three hook registrations and two deny rules. When the
-file existed and something was added, the old version is saved next to it as
-`settings.json.bak-<timestamp>`. Compare the two, then delete the backup or
-commit it, because the readiness check fails on uncommitted files. If the
-existing file is not valid JSON, init stops and changes nothing.
+The change to `.claude/settings.json` is opt-in. Init prints the exact diff:
+three hook registrations, each `uv run --quiet --script
+"${CLAUDE_PROJECT_DIR}/.claude/hooks/<name>"`, and two deny rules, with every
+existing key kept. It writes the change only after a yes at the terminal
+prompt or with `--apply-settings`; otherwise the proposed file is saved as
+`fable/settings.proposed.json`, settings stay untouched, and readiness fails
+on "hooks registered". When it writes and the file existed, the old version
+is saved as `settings.json.bak-<timestamp>`, and `fable/settings_install.json`
+records what was added. Commit or delete the backup, because the readiness
+check fails on uncommitted files. If the existing file is not valid JSON,
+init stops and changes nothing.
+
+To undo, run `init_handoff.py --project . --uninstall`. If settings were not
+edited since, the backup is restored exactly (or the file removed, when there
+was none). Otherwise only this skill's hooks and deny rules are taken out and
+everything else is kept. The hook scripts and unmodified agent files are
+removed; `fable/` stays.
 
 The Stop hook's timeout in the settings is the verify timeout plus two
 minutes, because the gate runs the verify command. If you raise
@@ -254,7 +265,7 @@ that the run branch carries the package.
 
 ## 5. The launcher
 
-`python3 fable/launch.py --dry-run` prints the command without starting
+`uv run --script fable/launch.py --dry-run` prints the command without starting
 anything. Its shape is:
 
 ```bash
@@ -308,7 +319,7 @@ Start it so that it outlives the terminal, for example under `nohup` or
 the run.
 
 ```bash
-nohup python3 fable/launch.py > fable/.run/launch.out 2>&1 &
+nohup uv run --script fable/launch.py > fable/.run/launch.out 2>&1 &
 ```
 
 ## 6. handoff.json reference

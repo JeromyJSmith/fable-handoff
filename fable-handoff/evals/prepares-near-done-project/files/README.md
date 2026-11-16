@@ -2,4 +2,4 @@
 
 Turns titles into URL slugs.
 
-Run tests: python3 -m pytest -q
+Run tests: uv run pytest -q

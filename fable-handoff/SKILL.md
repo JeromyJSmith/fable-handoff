@@ -1,6 +1,6 @@
 ---
 name: fable-handoff
-compatibility: Designed for Claude Code (hooks, subagents, the claude CLI). Needs python3 3.9 or later and git; jq for the conversation and spec queries. Written for Claude Fable 5.2; see references/sources.md when models or Claude Code change.
+compatibility: Designed for Claude Code (hooks, subagents, the claude CLI). Needs uv (it supplies Python 3.11 or later; no other Python manager is used) and git; jq for the conversation and spec queries. Written for Claude Fable 5.2; see references/sources.md when models or Claude Code change.
 description: Prepares a software project for Claude Fable 5.2 to finish in one long unattended run, and reviews the result afterwards. Use it when the user wants to hand a project or a large task to Fable, start a long-horizon, overnight or walk-away run, get autonomous completion with nobody watching, write a mission brief or build a handoff package, make CLAUDE.md, skills or other instruction files safe for Fable 5.2, or review what an unattended run produced. Covers discovery, a single owner interview, a checkable definition of done, guard and stop hooks, a readiness check, the launcher and the post-run review.
 ---
 
@@ -45,7 +45,7 @@ three facts, to prove that it does, and to start the run.
 ## What is in this skill
 
 Scripts are in `${CLAUDE_SKILL_DIR}/scripts/` (outside Claude Code, the
-directory this file is in). Run each with `python3` and `--project`; each has
+directory this file is in). Run each with `uv run --script` and `--project`; each has
 `--help`. In order of use: `preflight.py` and `conversation_context.py`
 (phase 1), `init_handoff.py` (4), `audit_rules.py` (5), `spec_tool.py` and
 `render_handoff.py` (6), `readiness_check.py` and `system_review.py` (7), and
@@ -112,7 +112,7 @@ past errors and successes, and tests or evals. Preflight sorts these into the
 six inputs a takeover needs and reports what is missing:
 
 ```bash
-python3 "${CLAUDE_SKILL_DIR}/scripts/preflight.py" --project /path/to/project --run-tests
+uv run --script "${CLAUDE_SKILL_DIR}/scripts/preflight.py" --project /path/to/project --run-tests
 ```
 
 Close every BLOCKING gap before going further. The usual one in a project that
@@ -182,6 +182,17 @@ not "has full access". At the end of the interview, show the owner the list
 and have it confirmed. The list goes into `fable/DECISIONS.md` under "Made
 before the run" in phase 4, when that file exists.
 
+For decisions, write each into `open_questions` (the spec, or
+`fable/open_decisions.json`): topic, what it is, why it matters, options with
+what happens, and a recommendation with its reason, in plain words with no
+bare numbers or IDs. The decision interview asks the owner one at a time and
+records each answer; it launches nothing:
+
+```bash
+uv run --script "${CLAUDE_SKILL_DIR}/scripts/decision_interview.py" --project . --check
+uv run --script "${CLAUDE_SKILL_DIR}/scripts/decision_interview.py" --project .
+```
+
 Do not leave the interview with an open question. If the owner cannot decide
 something, agree on a default that is safe and reversible, and record it as a
 default.
@@ -216,7 +227,7 @@ Say so, and go back to phase 0 with the owner.
 ## Phase 4: Scaffold with init_handoff.py, then tune handoff.json
 
 ```bash
-python3 "${CLAUDE_SKILL_DIR}/scripts/init_handoff.py" --project . \
+uv run --script "${CLAUDE_SKILL_DIR}/scripts/init_handoff.py" --project . \
   --verify-command "uv run pytest -q" --branch fable/checkout --max-budget-usd 60 \
   [--from-preflight] [--ownership]
 ```
@@ -226,9 +237,10 @@ Keep the defaults for model (the pinned ID `claude-fable-5-2`, because the
 mode (`auto` on the owner's machine). Add `--ownership` only if the owner said
 the codebase is the model's to reshape. `--from-preflight` reuses preflight's
 verify command, protected paths and open criteria. Init never overwrites a
-file without `--force` (which resets a filled-in mission too) and backs up
-`.claude/settings.json` before merging; delete the backup once compared. For an
-older package, `--refresh-hooks` replaces only the hooks and the launcher.
+file without `--force` (which resets a filled-in mission too).  It prints the
+`.claude/settings.json` diff and writes it only on the owner's yes (prompt or
+`--apply-settings`); `--uninstall` removes the hooks and restores the backup. For an older package, `--refresh-hooks`
+replaces only the hooks and the launcher.
 
 Then create the run branch (never main), write the interview answers into
 `fable/DECISIONS.md`, and tune `fable/handoff.json` with
@@ -241,21 +253,22 @@ subagents and can be overshot. To give the run an MCP server such as
 InfraNodus, set `mcp_config` to a JSON file in the project. Limits belong here
 because code enforces this file. A limit written only in the mission is a request.
 
-## Phase 5: Clean up instructions with audit_rules.py
+## Phase 5: Propose instruction changes; edit nothing before the owner's yes
 
 ```bash
-python3 "${CLAUDE_SKILL_DIR}/scripts/audit_rules.py" --project . --extra ~/.claude/CLAUDE.md
+uv run --script "${CLAUDE_SKILL_DIR}/scripts/audit_rules.py" --project . --extra ~/.claude/CLAUDE.md
+uv run --script "${CLAUDE_SKILL_DIR}/scripts/audit_rules.py" --project . --propose
 ```
 
-Pass the outside instruction files found in phase 1 with `--extra`. Rewrite
-every **FIX** finding (it tells the model to wait for a person, to write out
-its reasoning or to think less). Judge every **REVIEW** finding by reading the
-line as the model will, to the letter: rewrite it, or accept it by adding
-`"<file>:<rule id>"` to `audit_accept`. Scope rules instead of deleting them
-("In interactive sessions, confirm before changing the schema. In unattended
-runs, do not change it."), keeping "in interactive sessions" on the rule's
-line. Propose edits to files outside the project; the owner makes them. Rerun
-with `--strict` until it exits 0. If the owner keeps a true FIX line, do not launch.
+Never edit an instructions file by hand. `--propose` writes the rewrite of
+every **FIX** finding as a diff in `fable/RULES_PROPOSAL.md` and changes
+nothing. Show the owner the diff and wait; only after a yes, run `--apply
+--approved-by "<name>"`. **REVIEW** findings are the owner's call (a new
+proposal, or `audit_accept`). **Owner rules are never rewritten** (marked
+"(owner rule)", under an "Owner rules" heading, or rules like commit only when
+the owner says, never edit a test to pass, one writer at a time, record every
+decision). Each is HONORED or BLOCKS; a blocking one fails readiness, so tell
+the owner which and leave the change to them.
 
 ## Phase 6: Write the mission and seed the ledger
 
@@ -293,7 +306,7 @@ refused.
 ## Phase 7: Prove readiness, get the owner's sign-off, look back
 
 ```bash
-python3 "${CLAUDE_SKILL_DIR}/scripts/readiness_check.py" --project . --extra ~/.claude/CLAUDE.md
+uv run --script "${CLAUDE_SKILL_DIR}/scripts/readiness_check.py" --project . --extra ~/.claude/CLAUDE.md
 ```
 
 The check tests the config, mission, ledger, decisions, branch, git state,
@@ -320,11 +333,11 @@ a gap analysis on the mission and brief too.
 
 ## Phase 8: Launch with fable/launch.py and hand back
 
-Show the owner `python3 fable/launch.py --dry-run`, and start only when they
+Show the owner `uv run --script fable/launch.py --dry-run`, and start only when they
 say so, so that it outlives the terminal:
 
 ```bash
-nohup python3 fable/launch.py > fable/.run/launch.out 2>&1 &
+nohup uv run --script fable/launch.py > fable/.run/launch.out 2>&1 &
 ```
 
 The launcher refuses to start if a hook script is missing (Claude Code would
@@ -343,7 +356,7 @@ on a laptop, to prevent sleep.
 ## Phase 9: Review with post_run_report.py and the diff
 
 ```bash
-python3 "${CLAUDE_SKILL_DIR}/scripts/post_run_report.py" --project .
+uv run --script "${CLAUDE_SKILL_DIR}/scripts/post_run_report.py" --project .
 ```
 
 It re-runs the verify command and prints `CLEAN` or `NEEDS REVIEW` with

@@ -1,13 +1,13 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 # /// script
-# requires-python = ">=3.9"
+# requires-python = ">=3.11"
 # dependencies = []
 # ///
 """Preflight: map what a project already has onto what a Fable takeover needs.
 
-    python3 scripts/preflight.py --project /path/to/project
-    python3 scripts/preflight.py --project . --goal docs/GOAL.md --run-tests
-    python3 scripts/preflight.py --project . --source docs/ --source notes/lessons.md --json
+    uv run --script scripts/preflight.py --project /path/to/project
+    uv run --script scripts/preflight.py --project . --goal docs/GOAL.md --run-tests
+    uv run --script scripts/preflight.py --project . --source docs/ --source notes/lessons.md --json
 
 Use it on a project that is already close: it has a goal, specification
 documents, standards, notes on its current state, a record of what went wrong
@@ -37,6 +37,9 @@ Exit codes: 0 every input is at least THIN and nothing blocks, 1 a required
 input is MISSING or a blocking gap exists. Standard library only.
 """
 from __future__ import annotations
+
+# Every script in this skill runs under uv, never a bare interpreter.
+UV_SCRIPT = ["uv", "run", "--quiet", "--script"]
 
 import argparse
 import json
@@ -202,9 +205,10 @@ def detect_test_commands(project: Path, eval_files: list[str]) -> list[str]:
     py_tests = any(re.search(r"(^|/)test_[^/]+\.py$|_test\.py$", f) for f in eval_files)
     if pyproject.exists() or (project / "pytest.ini").exists() or (project / "setup.cfg").exists() or py_tests:
         text = read_text(pyproject)
-        if (project / "uv.lock").exists() or "[tool.uv]" in text:
+        if pyproject.exists() and ("[project]" in text or "[tool.uv]" in text or (project / "uv.lock").exists()):
             found.append("uv run pytest -q")
-        found.append("python3 -m pytest -q")
+        else:
+            found.append("uv run --with pytest pytest -q")
     pkg = project / "package.json"
     if pkg.exists():
         try:
@@ -513,7 +517,7 @@ def previous_run(project: Path) -> dict:
 def read_conversations(project: Path, paths: list[str], project_logs: bool, no_write: bool) -> dict:
     """Run conversation_context.py and return its Markdown and data, or an error to report."""
     script = Path(__file__).resolve().parent / "conversation_context.py"
-    cmd = [sys.executable, str(script), "--project", str(project), "--json"]
+    cmd = [*UV_SCRIPT, str(script), "--project", str(project), "--json"]
     if paths:
         cmd += ["--logs", *paths]
     if project_logs:
@@ -535,7 +539,7 @@ def read_conversations(project: Path, paths: list[str], project_logs: bool, no_w
 def run_audit(project: Path, standards: list[str]) -> dict:
     """Run audit_rules.py on the instruction files and the standards documents."""
     script = Path(__file__).resolve().parent / "audit_rules.py"
-    cmd = [sys.executable, str(script), "--project", str(project), "--json"]
+    cmd = [*UV_SCRIPT, str(script), "--project", str(project), "--json"]
     extra = [str(project / s) for s in standards]
     if extra:
         cmd += ["--extra", *extra]

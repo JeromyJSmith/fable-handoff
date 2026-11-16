@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import py_compile
 import re
 import sys
@@ -9,6 +10,7 @@ import sys
 import pytest
 
 from conftest import (
+    UV_SCRIPT,
     DECISIONS, MISSION, SKILL, SOLUTION, STATE, VERIFY, bare_project, commit_all, git, hook, init,
     make_stub, prepared_project, read_cfg, readiness, run, script, statuses, stub_calls, write_cfg,
 )
@@ -647,7 +649,7 @@ def test_readiness_warns_on_unpinned_subagent(tmp_path):
 # --------------------------------------------------------------------------- launcher
 
 def launch(project, *args):
-    return run([sys.executable, str(project / "fable/launch.py"), *args], cwd=project)
+    return run([*UV_SCRIPT, str(project / "fable/launch.py"), *args], cwd=project)
 
 
 def ready_with_stub(tmp_path, plan, **cfg):
@@ -1604,8 +1606,8 @@ def test_conversation_context_errors(tmp_path):
         assert conversation_context(project).returncode == 1
     bare_path = tmp_path / "nojq"
     bare_path.mkdir()
-    (bare_path / "python3").symlink_to(sys.executable)
-    proc = run([sys.executable, str(SKILL / "scripts/conversation_context.py"), "--project", str(project), "--logs", str(tmp_path)],
+    (bare_path / "uv").symlink_to(shutil.which("uv"))
+    proc = run([*UV_SCRIPT, str(SKILL / "scripts/conversation_context.py"), "--project", str(project), "--logs", str(tmp_path)],
                env={"PATH": str(bare_path)})
     assert proc.returncode == 2 and "jq is not installed" in proc.stderr
 
@@ -2031,3 +2033,224 @@ def test_sources_reference_names_the_official_pages():
                 "code.claude.com/docs/en/permission-modes", "prompting-claude-fable-5-2", "optimizing-for-cost-and-intelligence",
                 "agent-skills/best-practices"]:
         assert url in text, url
+
+
+# --------------------------------------------------------------------------- 1.1: uv, owner rules, interview, opt-in settings
+
+BROKEN_VERIFY = "uv run --quiet --no-project python -c 'import no_such_module_for_fable_handoff'"
+
+
+def test_every_script_is_a_uv_script_and_nothing_calls_bare_python():
+    sources = [*SKILL.glob("scripts/*.py"), *SKILL.glob("assets/**/*.py")]
+    for path in sources:
+        text = path.read_text()
+        assert text.startswith("#!/usr/bin/env -S uv run --script\n# /// script\n"), path.name
+        assert 'requires-python = ">=3.11"' in text.split("# ///", 2)[1], path.name
+        assert "sys.executable" not in text, path.name
+    docs = [*SKILL.rglob("*.md"), SKILL.parent / "README.md", SKILL.parent / "install.sh"]
+    for path in docs:
+        if "evals" in path.parts:
+            continue
+        text = path.read_text()
+        assert not re.search(r"(?<![\w-])python3? (?:-m |\S+\.py)", text), path.name
+        assert not re.search(r"(?<![\w-])pip3? install", text), path.name
+
+
+def test_hooks_are_registered_through_uv(tmp_path):
+    project = bare_project(tmp_path)
+    init(project)
+    settings = json.loads((project / ".claude/settings.json").read_text())
+    commands = [h["command"] for groups in settings["hooks"].values() for g in groups for h in g["hooks"]]
+    assert len(commands) == 3 and all(c.startswith("uv run --quiet --script ") for c in commands)
+
+
+def test_readiness_fails_when_verify_cannot_run(tmp_path):
+    project = prepared_project(tmp_path, verify_command=BROKEN_VERIFY)
+    commit_all(project, "broken verify")
+    _, data = readiness(project)
+    row = next(r for r in data["rows"] if r["check"] == "verify")
+    assert row["status"] == "FAIL" and "cannot run here" in row["detail"], row
+
+
+def test_stop_gate_names_a_verify_that_cannot_run(tmp_path):
+    project = prepared_project(tmp_path, verify_command=BROKEN_VERIFY)
+    check_tasks(project)
+    (project / "fable/REPORT.md").write_text("done\n")
+    proc = gate(project)
+    assert proc.returncode == 2 and "could not even start" in proc.stderr and "No module named" in proc.stderr
+
+
+OWNER_CLAUDE = """# Rules
+
+- Do not implement anything until the plan is approved by me.
+- Think step by step and explain your reasoning.
+- Never edit a test to make it pass.
+- One writer at a time; take the writer lock first.
+- Record every decision.
+- Use type hints. (owner rule)
+"""
+
+
+def audit_cmd(project, *extra):
+    return run([*script("audit_rules.py"), "--project", str(project), *extra])
+
+
+def test_owner_rules_are_found_and_never_proposed(tmp_path):
+    project = bare_project(tmp_path)
+    (project / "CLAUDE.md").write_text(OWNER_CLAUDE + "- Commit only when I say so.\n")
+    data = json.loads(audit_cmd(project, "--json").stdout)
+    kinds = {o["kind"]: o["effect"] for o in data["owner_rules"]}
+    assert kinds == {"tests-are-not-edited-to-pass": "honored", "one-writer": "honored", "record-decisions": "honored",
+                     "marked": "honored", "commit-by-owner": "blocks"}
+    owner_lines = {o["line"] for o in data["owner_rules"]}
+    assert not any(f["line"] in owner_lines for f in data["findings"])
+    proc = audit_cmd(project, "--propose")
+    assert proc.returncode == 0 and "Nothing was edited" in proc.stdout
+    proposal = json.loads((project / "fable/rules_proposal.json").read_text())
+    assert {e["line"] for e in proposal["edits"]} == {3, 4}
+    assert not owner_lines & {e["line"] for e in proposal["edits"]}
+
+
+def test_audit_edits_nothing_until_the_owner_approves(tmp_path):
+    project = bare_project(tmp_path)
+    (project / "CLAUDE.md").write_text(OWNER_CLAUDE)
+    audit_cmd(project, "--propose")
+    assert (project / "CLAUDE.md").read_text() == OWNER_CLAUDE
+    assert "-- Think step by step" in (project / "fable/RULES_PROPOSAL.md").read_text().replace("- -", "--")
+    assert audit_cmd(project, "--apply").returncode == 2, "applying needs the approver's name"
+    assert (project / "CLAUDE.md").read_text() == OWNER_CLAUDE
+    proc = audit_cmd(project, "--apply", "--approved-by", "Jane Owner")
+    assert proc.returncode == 0, proc.stderr
+    after = (project / "CLAUDE.md").read_text()
+    assert "- In interactive sessions, do not implement anything until the plan is approved by me." in after
+    assert "Think step by step" not in after
+    for kept in ["Never edit a test to make it pass.", "One writer at a time", "Record every decision.", "Use type hints. (owner rule)"]:
+        assert kept in after
+    assert json.loads((project / "fable/rules_proposal.json").read_text())["approved_by"] == "Jane Owner"
+
+
+def test_apply_refuses_when_the_file_changed_after_the_proposal(tmp_path):
+    project = bare_project(tmp_path)
+    (project / "CLAUDE.md").write_text(OWNER_CLAUDE)
+    audit_cmd(project, "--propose")
+    (project / "CLAUDE.md").write_text(OWNER_CLAUDE + "- New line.\n")
+    proc = audit_cmd(project, "--apply", "--approved-by", "Jane Owner")
+    assert proc.returncode == 2 and "changed after the proposal" in proc.stderr
+    assert (project / "CLAUDE.md").read_text() == OWNER_CLAUDE + "- New line.\n"
+
+
+def test_readiness_refuses_an_owner_rule_the_run_cannot_follow(tmp_path):
+    project = prepared_project(tmp_path)
+    (project / "CLAUDE.md").write_text("# Rules\n\n- Commit only when I say so.\n")
+    commit_all(project, "owner rule")
+    proc, data = readiness(project)
+    assert statuses(data)["owner rules"] == "FAIL" and proc.returncode != 0
+    assert (project / "CLAUDE.md").read_text() == "# Rules\n\n- Commit only when I say so.\n"
+
+
+def test_readiness_passes_owner_rules_the_run_honors(tmp_path):
+    project = prepared_project(tmp_path)
+    (project / "CLAUDE.md").write_text("# Rules\n\n- Never edit a test to make it pass.\n- One writer at a time.\n")
+    commit_all(project, "owner rules")
+    _, data = readiness(project)
+    assert statuses(data)["owner rules"] == "PASS"
+
+
+QUESTION = {
+    "question": "Should slugs keep numbers?",
+    "topic": "Numbers in URL slugs",
+    "what": "A slug is the readable part of a post's web address, made from its title.",
+    "why_it_matters": "Titles like '10 tips' lose meaning without the number, and changing it later breaks shared links.",
+    "options": [{"choice": "Keep numbers", "what_happens": "'10 Tips' becomes 10-tips."},
+                {"choice": "Drop numbers", "what_happens": "'10 Tips' becomes tips, and two posts can collide."}],
+    "recommendation": "Keep numbers",
+    "recommendation_reason": "It keeps titles distinct and readable.",
+}
+
+
+def interview(project, *extra, stdin=None):
+    return run([*script("decision_interview.py"), "--project", str(project), *extra], stdin=stdin)
+
+
+def test_interview_refuses_questions_not_in_plain_words(tmp_path):
+    project = bare_project(tmp_path)
+    (project / "fable").mkdir()
+    bad = {**QUESTION, "question": "Settle D3 before Q-12?"}
+    (project / "fable/open_decisions.json").write_text(json.dumps({"open_questions": [bad, {"question": "Which database?"}]}))
+    proc = interview(project, "--check", "--json")
+    data = json.loads(proc.stdout)
+    assert proc.returncode == 1 and data["ready"] == 0
+    assert "D3" in " ".join(data["needs_writing_up"][0]["problems"])
+    assert "missing what" in data["needs_writing_up"][1]["problems"]
+
+
+def test_interview_asks_one_at_a_time_and_records_in_spec_and_decisions(tmp_path):
+    project = prepared_project(tmp_path)
+    spec = {"open_questions": [QUESTION, {**QUESTION, "question": "Should slugs keep dots?", "topic": "Dots in URL slugs",
+                                           "options": [{"choice": "Keep dots", "what_happens": "v1.2 stays v1.2."},
+                                                       {"choice": "Replace dots", "what_happens": "v1.2 becomes v1-2."}],
+                                           "recommendation": "Replace dots"}], "decisions": []}
+    (project / "fable/handoff_spec.json").write_text(json.dumps(spec))
+    proc = interview(project, stdin="b\nCollisions are fine for now\nr\n")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    out = proc.stdout
+    for words in ["What this is:", "Why it matters:", "If you choose this:", "My recommendation: Keep numbers", "1 more decision after this one"]:
+        assert words in out
+    assert not re.search(r"\b(?:decision|question) \d", out, re.I)
+    saved = json.loads((project / "fable/handoff_spec.json").read_text())
+    assert saved["open_questions"] == []
+    assert [d["decision"] for d in saved["decisions"]] == ["Numbers in URL slugs: Drop numbers", "Dots in URL slugs: Replace dots"]
+    decisions = (project / "fable/DECISIONS.md").read_text()
+    assert "Numbers in URL slugs: Drop numbers. Reason: Collisions are fine for now." in decisions
+    assert "Dots in URL slugs: Replace dots" in decisions
+    assert "## Open questions for the owner\n\nNone." in decisions
+
+
+def test_init_shows_the_settings_change_and_writes_nothing_without_opt_in(tmp_path):
+    project = bare_project(tmp_path)
+    (project / ".claude").mkdir()
+    original = json.dumps({"permissions": {"allow": ["Bash(git status)"]}})
+    (project / ".claude/settings.json").write_text(original)
+    proc = run([*script("init_handoff.py"), "--project", str(project), "--verify-command", VERIFY])
+    assert proc.returncode == 0
+    out = json.loads(proc.stdout)
+    assert out["settings_written"] is False and "+++ b/.claude/settings.json" in out["settings_diff"]
+    assert "fable_guard.py" in proc.stderr and "NOT changed" in proc.stderr
+    assert (project / ".claude/settings.json").read_text() == original
+    assert "fable_stop_gate.py" in (project / "fable/settings.proposed.json").read_text()
+    _, data = readiness(project, "--allow-dirty")
+    assert statuses(data)["hooks registered"] == "FAIL"
+
+
+def test_uninstall_restores_the_backup(tmp_path):
+    project = bare_project(tmp_path)
+    (project / ".claude").mkdir()
+    original = json.dumps({"permissions": {"allow": ["Bash(git status)"]}})
+    (project / ".claude/settings.json").write_text(original)
+    assert init(project).returncode == 0
+    proc = run([*script("init_handoff.py"), "--project", str(project), "--uninstall"])
+    assert proc.returncode == 0, proc.stderr
+    assert (project / ".claude/settings.json").read_text() == original
+    assert not list((project / ".claude/hooks").glob("fable_*.py"))
+    assert not list((project / ".claude/agents").glob("fable-*.md"))
+    assert (project / "fable/MISSION.md").exists(), "the owner's package stays"
+
+
+def test_uninstall_after_later_edits_removes_only_the_skills_entries(tmp_path):
+    project = bare_project(tmp_path)
+    assert init(project).returncode == 0
+    settings = json.loads((project / ".claude/settings.json").read_text())
+    settings["env"] = {"KEEP": "1"}
+    settings["permissions"]["deny"].append("Read(./secrets/**)")
+    (project / ".claude/settings.json").write_text(json.dumps(settings))
+    assert run([*script("init_handoff.py"), "--project", str(project), "--uninstall"]).returncode == 0
+    after = json.loads((project / ".claude/settings.json").read_text())
+    assert after["env"] == {"KEEP": "1"} and after["permissions"]["deny"] == ["Read(./secrets/**)"]
+    assert "hooks" not in after
+
+
+def test_defaults_keep_the_run_off_main_and_permissions_unbypassed(tmp_path):
+    project = bare_project(tmp_path)
+    init(project)
+    cfg = read_cfg(project)
+    assert cfg["permission_mode"] != "bypassPermissions" and cfg["branch"] not in ("main", "master")

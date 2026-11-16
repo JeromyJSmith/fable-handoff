@@ -1,13 +1,13 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 # /// script
-# requires-python = ">=3.9"
+# requires-python = ">=3.11"
 # dependencies = []
 # ///
 """Look back over everything gathered for a handoff and propose improvements.
 
-    python3 scripts/system_review.py --project .
-    python3 scripts/system_review.py --project . --json
-    python3 scripts/system_review.py --project . --strict    # exit 1 if anything should change before launch
+    uv run --script scripts/system_review.py --project .
+    uv run --script scripts/system_review.py --project . --json
+    uv run --script scripts/system_review.py --project . --strict    # exit 1 if anything should change before launch
 
 Run it once the readiness check says READY, before you launch. Everything
 the earlier phases produced is on disk by then: the preflight report, the

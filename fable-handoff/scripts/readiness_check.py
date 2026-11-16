@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
 """Prove that a handoff package is ready for an unattended run.
 
 Runs every check, prints one row per check (PASS, WARN or FAIL) and exits 0
@@ -11,9 +15,12 @@ The check runs the verify command once to record the baseline. Before the
 run that command is expected to fail, because the mission is not done yet.
 
 Example:
-    python3 readiness_check.py --project ~/code/shop --extra /path/to/global-instructions.md
+    uv run --script readiness_check.py --project ~/code/shop --extra /path/to/global-instructions.md
 """
 from __future__ import annotations
+
+# Every script in this skill runs under uv, never a bare interpreter.
+UV_SCRIPT = ["uv", "run", "--quiet", "--script"]
 
 import argparse
 import datetime
@@ -151,7 +158,7 @@ def run_hook(project, name, payload, dry_run=False):
         env["FABLE_GATE_DRY_RUN"] = "1"
     try:
         return subprocess.run(
-            [sys.executable, str(project / ".claude" / "hooks" / name)],
+            [*UV_SCRIPT, str(project / ".claude" / "hooks" / name)],
             input=json.dumps(payload), capture_output=True, text=True, cwd=project, env=env, timeout=120,
         )
     except (OSError, subprocess.TimeoutExpired):
@@ -382,6 +389,21 @@ def check_secrets(project):
     return [("PASS", "secrets", "no secret files tracked by git")]
 
 
+# Output that means the command never got to check anything: the interpreter,
+# a module or the program itself is missing. On macOS a bare `python3` is often
+# a different interpreter from the one with the project's packages, so a verify
+# command like `python3 -m pytest` fails this way forever.
+CANNOT_RUN = re.compile(
+    r"No module named|ModuleNotFoundError|command not found|: not found\b|No such file or directory|"
+    r"error: Failed to spawn|ImportError while loading conftest",
+    re.IGNORECASE,
+)
+
+
+def cannot_run(code, output):
+    """True when a failing command failed before it could check anything."""
+    return code in (126, 127) or (code not in (0, None) and bool(CANNOT_RUN.search(output or "")))
+
 def check_verify(project, config, allow_passing):
     command = str(config.get("verify_command") or "").strip()
     baseline = {"command": command, "exit_code": None, "seconds": 0.0}
@@ -394,8 +416,9 @@ def check_verify(project, config, allow_passing):
     last_line = (output.strip().splitlines() or [""])[-1][:160]
     if code is None:
         return baseline, [("FAIL", "verify", "`%s` did not finish within %s seconds. Make it faster or raise verify_timeout_seconds." % (command, timeout))]
-    if code in (126, 127):
-        return baseline, [("FAIL", "verify", "`%s` cannot be executed (exit %d: %s). Fix the command or install what it needs." % (command, code, last_line))]
+    if cannot_run(code, output):
+        cause = next((l.strip() for l in output.splitlines() if CANNOT_RUN.search(l)), last_line)[:160]
+        return baseline, [("FAIL", "verify", "`%s` cannot run here (exit %d: %s), so it can never pass and the stop gate would never release the run. Fix how it runs; for Python, run it through uv, for example `uv run pytest`." % (command, code, cause))]
     if code == 0:
         detail = "`%s` already passes, so it cannot tell a finished mission from an untouched one. Add failing tests or checks for the new work first." % command
         return baseline, [("WARN" if allow_passing else "FAIL", "verify", detail)]
@@ -481,14 +504,17 @@ def check_session_context(project):
 
 
 def check_audit(project, extras):
-    command = [sys.executable, str(SCRIPTS / "audit_rules.py"), "--project", str(project), "--json"]
+    command = [*UV_SCRIPT, str(SCRIPTS / "audit_rules.py"), "--project", str(project), "--json"]
     if extras:
         command += ["--extra", *extras]
     result = subprocess.run(command, capture_output=True, text=True)
     try:
-        findings = json.loads(result.stdout)["findings"]
+        data = json.loads(result.stdout)
+        findings = data["findings"]
+        owners = data.get("owner_rules", [])
     except (ValueError, KeyError, TypeError):
         return [("FAIL", "rules audit", "audit_rules.py did not produce a result: %s" % (result.stderr.strip() or "no output")[:200])]
+    rows = check_owner_rules(owners)
     open_findings = [f for f in findings if not f["accepted"]]
     fixes = [f for f in open_findings if f["severity"] == "FIX"]
     reviews = [f for f in open_findings if f["severity"] == "REVIEW"]
@@ -497,10 +523,23 @@ def check_audit(project, extras):
         return short_list("%s:%d [%s]" % (f["file"], f["line"], f["rule"]) for f in items)
 
     if fixes:
-        return [("FAIL", "rules audit", "%d instruction line(s) would stall the run: %s. Run audit_rules.py for the reason and the rewrite of each." % (len(fixes), where(fixes)))]
+        return rows + [("FAIL", "rules audit", "%d instruction line(s) would stall the run: %s. Run audit_rules.py for the reason and the rewrite of each." % (len(fixes), where(fixes)))]
     if reviews:
-        return [("WARN", "rules audit", "%d instruction line(s) to review: %s. Run audit_rules.py, then rewrite each or add it to audit_accept." % (len(reviews), where(reviews)))]
-    return [("PASS", "rules audit", "no instruction lines need attention")]
+        return rows + [("WARN", "rules audit", "%d instruction line(s) to review: %s. Run audit_rules.py, then rewrite each or add it to audit_accept." % (len(reviews), where(reviews)))]
+    return rows + [("PASS", "rules audit", "no instruction lines need attention")]
+
+
+def check_owner_rules(owners):
+    """Owner rules are never rewritten. One the run cannot work under stops the launch."""
+    blocking = [o for o in owners if o.get("effect") == "blocks"]
+    if blocking:
+        detail = "; ".join('%s:%d "%s": %s' % (o["file"], o["line"], o["text"][:80], o["how"]) for o in blocking[:3])
+        return [("FAIL", "owner rules", "%d owner rule(s) cannot be followed by an unattended run, so it will not launch: %s. "
+                 "The skill never rewrites an owner rule. The owner can change the rule themselves, or do this job interactively." % (len(blocking), detail))]
+    if owners:
+        return [("PASS", "owner rules", "%d owner rule(s) kept as written and honored by the run: %s"
+                 % (len(owners), short_list("%s:%d [%s]" % (o["file"], o["line"], o["kind"]) for o in owners)))]
+    return []
 
 
 def check_spec(project):
@@ -508,7 +547,7 @@ def check_spec(project):
     if not (project / "fable" / "handoff_spec.json").exists():
         return []
     scripts = Path(__file__).resolve().parent
-    proc = subprocess.run([sys.executable, str(scripts / "spec_tool.py"), "check", "--project", str(project), "--json"],
+    proc = subprocess.run([*UV_SCRIPT, str(scripts / "spec_tool.py"), "check", "--project", str(project), "--json"],
                           capture_output=True, text=True, timeout=120)
     try:
         result = json.loads(proc.stdout)
@@ -518,11 +557,11 @@ def check_spec(project):
         bad = ["%s %s" % (e["path"], e["message"]) for e in result.get("schema_errors", [])]
         bad += ["%s %s" % (p["path"], p["message"]) for p in result.get("problems", []) if p["severity"] == "FAIL"]
         return [("FAIL", "handoff spec", "fable/handoff_spec.json is not ready: " + short_list(bad or [result.get("load_error", "")]) + ". Run spec_tool.py check for the full list.")]
-    signoff = subprocess.run([sys.executable, str(scripts / "spec_tool.py"), "status", "--project", str(project)],
+    signoff = subprocess.run([*UV_SCRIPT, str(scripts / "spec_tool.py"), "status", "--project", str(project)],
                              capture_output=True, text=True, timeout=60)
     if signoff.returncode != 0:
         return [("FAIL", "handoff spec", "the spec is valid, but " + signoff.stdout.strip().split(": ", 1)[-1] + ".")]
-    drift = subprocess.run([sys.executable, str(scripts / "render_handoff.py"), "--project", str(project), "--check"],
+    drift = subprocess.run([*UV_SCRIPT, str(scripts / "render_handoff.py"), "--project", str(project), "--check"],
                            capture_output=True, text=True, timeout=120)
     if drift.returncode != 0:
         return [("WARN", "handoff spec", drift.stdout.strip() or drift.stderr.strip())]
@@ -670,7 +709,7 @@ def main():
         warned = sum(1 for status, _, _ in rows if status == "WARN")
         if ok:
             note = " Read the %d WARN row(s) and decide whether each is acceptable." % warned if warned else ""
-            print("READY: no check failed.%s Next, read fable/MISSION.md once as if you knew nothing else, then start with: python3 fable/launch.py" % note)
+            print("READY: no check failed.%s Next, read fable/MISSION.md once as if you knew nothing else, then start with: uv run --script fable/launch.py" % note)
         else:
             print("NOT READY: %d check(s) failed. Fix each FAIL row above, commit, and run this check again." % failed)
     return 0 if ok else 1

@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
 """Find instruction lines that will hurt an unattended Fable 5.2 run.
 
 Fable 5.2 applies instructions almost literally, so a line that was harmless
@@ -12,12 +16,28 @@ any .claude/ directory, and whatever --extra names. Lines inside fenced code
 blocks are ignored. A line that says it applies "in interactive sessions" is
 not reported for asking or waiting for a person.
 
+Owner rules are never rewritten. A line is an owner rule when it is marked
+"(owner rule)", "[owner rule]" or "<!-- owner-rule -->", sits under a heading
+that says "owner rules", or says one of these: commit only when the owner
+says, never edit a test to make it pass, writer locks or one writer at a time,
+record every decision. Each owner rule is either honored by the run or blocks
+it; a blocking rule makes the readiness check refuse to launch.
+
+Nothing here edits an instructions file until the owner approves:
+    --propose                 write fable/RULES_PROPOSAL.md (a diff) and wait
+    --apply --approved-by N   apply that exact proposal after the owner says yes
+
 Example:
-    python3 audit_rules.py --project ~/code/shop --extra /path/to/global-instructions.md
+    uv run --script audit_rules.py --project ~/code/shop --extra /path/to/global-instructions.md
+    uv run --script audit_rules.py --project . --propose
+    uv run --script audit_rules.py --project . --apply --approved-by "Jane Owner"
 """
 from __future__ import annotations
 
 import argparse
+import datetime
+import difflib
+import hashlib
 import json
 import os
 import re
@@ -163,6 +183,59 @@ RULES = [
     },
 ]
 
+# Owner rules. Each is kept exactly as written. "honored" says how the run
+# follows it; "blocks" says why an unattended run cannot proceed under it.
+OWNER_MARK = re.compile(r"\(owner rule\)|\[owner rule\]|<!--\s*owner[- ]rule\s*-->", re.IGNORECASE)
+OWNER_HEADING = re.compile(r"^#{1,6}\s.*\bowner(?:'s)? rules?\b", re.IGNORECASE)
+OWNER_RULES = [
+    {
+        "kind": "commit-by-owner",
+        "patterns": [
+            r"\bcommit\w*\b.{0,40}\b(?:when|after|once|if|unless)\b.{0,25}\b(?:i|me|we|us|the owner|the user|jero|someone)\b.{0,25}\b(?:say|says|said|tell|tells|ask|asks|approve\w*|confirm\w*|ok\w*)\b",
+            r"\b(?:never|do not|don'?t)\s+commit\b.{0,40}\bwithout\b",
+            r"\bcommit only (?:on|with|after) (?:my|the owner'?s?|explicit) (?:say|ok|approval|go[- ]ahead|instruction)",
+        ],
+        "effect": "blocks",
+        "how": "The run commits each finished task on its own branch, and nobody is there to say so.",
+    },
+    {
+        "kind": "tests-are-not-edited-to-pass",
+        "patterns": [
+            r"\b(?:never|do not|don'?t|must not)\s+(?:edit|change|modify|weaken|rewrite|delete|skip|touch)\w*\s+(?:a |the |any )?tests?\b.{0,50}\b(?:pass|green|succeed)",
+        ],
+        "effect": "honored",
+        "how": "Protected test paths are blocked by the guard hook, and the review flags weakened, skipped or deleted tests.",
+    },
+    {
+        "kind": "one-writer",
+        "patterns": [r"\bwriter[- ]?locks?\b", r"\bone writer at a time\b", r"\bsingle writer\b", r"\bonly one (?:agent|writer|session) (?:may |can )?(?:write|edit)s?\b"],
+        "effect": "honored",
+        "how": "The run keeps one writer at a time: subagents that change files run one after another, never side by side, and follow the lock the rule describes.",
+    },
+    {
+        "kind": "record-decisions",
+        "patterns": [r"\b(?:record|log|write down|document) (?:every|each|all) decisions?\b"],
+        "effect": "honored",
+        "how": "Every decision made during the run goes into fable/DECISIONS.md under \"Made during the run\".",
+    },
+]
+for _rule in OWNER_RULES:
+    _rule["compiled"] = [re.compile(pattern, re.IGNORECASE) for pattern in _rule["patterns"]]
+
+
+def owner_rule(line, under_owner_heading):
+    """The owner-rule entry for a line, or None."""
+    for rule in OWNER_RULES:
+        if any(regex.search(line) for regex in rule["compiled"]):
+            return rule
+    if OWNER_MARK.search(line) or under_owner_heading:
+        human = next((r for r in RULES if r["id"] in PERSON_RULES and any(x.search(line) for x in r["compiled"])), None)
+        if human and not INTERACTIVE_ONLY.search(line):
+            return {"kind": "marked", "effect": "blocks", "how": "It asks for a person, and nobody can answer during an unattended run."}
+        return {"kind": "marked", "effect": "honored", "how": "Kept exactly as written; the run follows it."}
+    return None
+
+
 # A line that limits itself to interactive sessions is not a problem for an
 # unattended run, so the two "needs a person" rules skip it.
 INTERACTIVE_ONLY = re.compile(
@@ -214,20 +287,36 @@ def display_name(path, project):
         return str(path)
 
 
-def scan_file(path, name, accepted):
+def scan_file(path, name, accepted, owners=None):
     findings = []
+    owners = owners if owners is not None else []
     try:
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError as error:
         sys.stderr.write("audit_rules: could not read %s (%s).\n" % (path, error))
         return findings
     in_fence = False
+    owner_level = None  # heading level of an "owner rules" section we are inside
     for number, line in enumerate(lines, start=1):
         if line.lstrip().startswith(("```", "~~~")):
             in_fence = not in_fence
             continue
         if in_fence or not line.strip():
             continue
+        heading = re.match(r"^(#{1,6})\s", line)
+        if heading:
+            level = len(heading.group(1))
+            if OWNER_HEADING.match(line):
+                owner_level = level
+                continue
+            if owner_level is not None and level <= owner_level:
+                owner_level = None
+        owned = owner_rule(line, owner_level is not None)
+        if owned:
+            text = re.sub(r"^(?:[-*+]|\d+[.)])\s+", "", line.strip())
+            owners.append({"file": name, "line": number, "text": text if len(text) <= 200 else text[:197] + "...",
+                           "kind": owned["kind"], "effect": owned["effect"], "how": owned["how"]})
+            continue  # owner rules are never findings to rewrite
         for rule in RULES:
             if rule["id"] in PERSON_RULES and INTERACTIVE_ONLY.search(line):
                 continue
@@ -257,7 +346,122 @@ def load_accepted(project):
     return set(accepted) if isinstance(accepted, list) else set()
 
 
-def render_markdown(files, findings):
+# Proposed rewrites. Only FIX findings get one; REVIEW findings are the
+# owner's call. Lines asking for a person are scoped to interactive sessions,
+# which keeps the rule for daytime work. Lines about thinking less or showing
+# reasoning do nothing for Fable 5.2 and are removed.
+def proposed_line(line, rule_id):
+    if rule_id in ("think-less", "reasoning-out"):
+        return None
+    match = re.match(r"^(\s*(?:[-*+]|\d+[.)])\s+|\s*)(.*)$", line)
+    prefix, body = match.group(1), match.group(2)
+    if INTERACTIVE_ONLY.search(body):
+        return line
+    return "%sIn interactive sessions, %s%s" % (prefix, body[:1].lower(), body[1:])
+
+
+def sha256(text):
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def build_proposal(project, paths, names, findings):
+    """Edits for every open FIX finding in a file inside the project, as a diff."""
+    by_file = {}
+    for f in findings:
+        if f["severity"] == "FIX" and not f["accepted"]:
+            by_file.setdefault(f["file"], {}).setdefault(f["line"], f["rule"])
+    edits, diffs, hashes, outside = [], [], {}, []
+    for path, name in zip(paths, names):
+        if name not in by_file:
+            continue
+        try:
+            path.relative_to(project)
+        except ValueError:
+            outside.append(name)  # files outside the project are the owner's to edit
+            continue
+        before = path.read_text(encoding="utf-8")
+        lines = before.splitlines(keepends=True)
+        after_lines = []
+        for number, line in enumerate(lines, start=1):
+            rule_id = by_file[name].get(number)
+            if rule_id is None:
+                after_lines.append(line)
+                continue
+            ending = "\n" if line.endswith("\n") else ""
+            new = proposed_line(line.rstrip("\n"), rule_id)
+            edits.append({"file": name, "line": number, "rule": rule_id, "old": line.rstrip("\n"), "new": new})
+            if new is not None:
+                after_lines.append(new + ending)
+        hashes[name] = sha256(before)
+        diffs.append("".join(difflib.unified_diff(lines, after_lines, "a/" + name, "b/" + name)))
+    return {"version": 1, "status": "pending", "created": datetime.datetime.now().isoformat(timespec="seconds"),
+            "files": hashes, "edits": edits, "outside_project": outside}, "".join(diffs)
+
+
+def write_proposal(project, proposal, diff):
+    fable = project / "fable"
+    fable.mkdir(exist_ok=True)
+    (fable / "rules_proposal.json").write_text(json.dumps(proposal, indent=2) + "\n", encoding="utf-8")
+    lines = [
+        "# Proposed changes to your instructions",
+        "",
+        "Nothing has been changed. These edits wait for your yes. Owner rules are",
+        "never in this list. To apply exactly this diff:",
+        "",
+        "    uv run --script audit_rules.py --project . --apply --approved-by \"Your Name\"",
+        "",
+    ]
+    if proposal["edits"]:
+        lines += ["```diff", diff.rstrip("\n"), "```", ""]
+    else:
+        lines += ["No edits to propose.", ""]
+    if proposal["outside_project"]:
+        lines += ["Files outside the project with lines to fix (edit them yourself): " + ", ".join(proposal["outside_project"]), ""]
+    (fable / "RULES_PROPOSAL.md").write_text("\n".join(lines), encoding="utf-8")
+
+
+def apply_proposal(project, approved_by):
+    path = project / "fable" / "rules_proposal.json"
+    try:
+        proposal = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        sys.stderr.write("audit_rules: no proposal to apply. Run with --propose, show the owner the diff, then apply.\n")
+        return 2
+    if proposal.get("status") != "pending":
+        sys.stderr.write("audit_rules: the proposal is %s, not pending. Run --propose again.\n" % proposal.get("status"))
+        return 2
+    for name, digest in proposal["files"].items():
+        current = (project / name).read_text(encoding="utf-8") if (project / name).exists() else ""
+        if sha256(current) != digest:
+            sys.stderr.write("audit_rules: %s changed after the proposal was made. Nothing was applied. Run --propose again and show the owner the new diff.\n" % name)
+            return 2
+    for name in proposal["files"]:
+        target = project / name
+        lines = target.read_text(encoding="utf-8").splitlines(keepends=True)
+        mine = {e["line"]: e for e in proposal["edits"] if e["file"] == name}
+        out = []
+        for number, line in enumerate(lines, start=1):
+            edit = mine.get(number)
+            if edit is None:
+                out.append(line)
+            elif edit["new"] is not None:
+                out.append(edit["new"] + ("\n" if line.endswith("\n") else ""))
+        target.write_text("".join(out), encoding="utf-8")
+    proposal.update(status="approved", approved_by=approved_by, approved_at=datetime.datetime.now().isoformat(timespec="seconds"))
+    path.write_text(json.dumps(proposal, indent=2) + "\n", encoding="utf-8")
+    decisions = project / "fable" / "DECISIONS.md"
+    if decisions.exists():
+        text = decisions.read_text(encoding="utf-8")
+        entry = "- Approved the %d instruction change(s) in fable/RULES_PROPOSAL.md. Reason: %s said yes on %s.\n" % (
+            len(proposal["edits"]), approved_by, proposal["approved_at"][:10])
+        marker = "## Made before the run\n"
+        text = text.replace(marker, marker + "\n" + entry, 1) if marker in text else text + "\n" + entry
+        decisions.write_text(text, encoding="utf-8")
+    print("Applied %d change(s), approved by %s." % (len(proposal["edits"]), approved_by))
+    return 0
+
+
+def render_markdown(files, findings, owners=()):
     open_fix = [f for f in findings if f["severity"] == "FIX" and not f["accepted"]]
     open_review = [f for f in findings if f["severity"] == "REVIEW" and not f["accepted"]]
     accepted = [f for f in findings if f["accepted"]]
@@ -282,6 +486,13 @@ def render_markdown(files, findings):
     section("Fix before launch", "Each of these stalls or derails an unattended run. Rewrite the line, or scope it to interactive sessions. The readiness check fails while one is left.", open_fix)
     section("Review", "Each of these may be fine. Read the line and decide. To keep one as it is, add \"<file>:<rule>\" to `audit_accept` in fable/handoff.json.", open_review)
     section("Accepted", "Listed in `audit_accept`, so they do not count against readiness.", accepted)
+    if owners:
+        lines.extend(["## Owner rules (never rewritten)", "",
+                      "Kept exactly as written. A rule that blocks means the readiness check refuses to launch until the owner changes it themselves.", ""])
+        for o in owners:
+            lines.append("- `%s:%d` [%s, %s] %s" % (o["file"], o["line"], o["kind"], o["effect"].upper(), o["text"]))
+            lines.append("  - " + o["how"])
+        lines.append("")
     if not findings:
         lines.extend(["No findings.", ""])
     lines.append("## Files scanned")
@@ -302,6 +513,9 @@ def main():
     parser.add_argument("--json", action="store_true", help="print {\"files\": [...], \"findings\": [...]} instead of Markdown")
     parser.add_argument("--out", metavar="FILE", help="also write the Markdown report to FILE")
     parser.add_argument("--strict", action="store_true", help="exit 1 when a FIX finding is not accepted")
+    parser.add_argument("--propose", action="store_true", help="write the proposed rewrites as a diff to fable/RULES_PROPOSAL.md and edit nothing")
+    parser.add_argument("--apply", action="store_true", help="apply the pending proposal exactly; needs --approved-by and refuses if a file changed since")
+    parser.add_argument("--approved-by", metavar="NAME", help="who approved the proposal; record it only after the owner says yes")
     args = parser.parse_args()
 
     project = Path(args.project).expanduser().resolve()
@@ -309,18 +523,31 @@ def main():
         sys.stderr.write("audit_rules: %s is not a directory. Pass the project root with --project.\n" % project)
         return 2
 
+    if args.apply:
+        if not (args.approved_by or "").strip():
+            sys.stderr.write("audit_rules: --apply needs --approved-by with the owner's name, given only after the owner approved the diff.\n")
+            return 2
+        return apply_proposal(project, args.approved_by.strip())
+
     accepted = load_accepted(project)
     paths = find_files(project, args.extra)
     names = [display_name(path, project) for path in paths]
-    findings = []
+    findings, owners = [], []
     for path, name in zip(paths, names):
-        findings += scan_file(path, name, accepted)
+        findings += scan_file(path, name, accepted, owners)
 
-    markdown = render_markdown(names, findings)
+    if args.propose:
+        proposal, diff = build_proposal(project, paths, names, findings)
+        write_proposal(project, proposal, diff)
+        sys.stdout.write(diff if diff else "No edits to propose.\n")
+        sys.stdout.write("\nNothing was edited. The diff is in fable/RULES_PROPOSAL.md and waits for the owner's yes.\n")
+        return 0
+
+    markdown = render_markdown(names, findings, owners)
     if args.out:
         Path(args.out).expanduser().write_text(markdown, encoding="utf-8")
     if args.json:
-        print(json.dumps({"files": names, "findings": findings}, indent=2))
+        print(json.dumps({"files": names, "findings": findings, "owner_rules": owners}, indent=2))
     else:
         sys.stdout.write(markdown)
 

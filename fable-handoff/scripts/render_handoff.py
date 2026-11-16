@@ -1,13 +1,13 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 # /// script
-# requires-python = ">=3.9"
+# requires-python = ">=3.11"
 # dependencies = []
 # ///
 """Write the handoff package from fable/handoff_spec.json.
 
-    python3 scripts/render_handoff.py --project .            # write the files
-    python3 scripts/render_handoff.py --project . --check    # report drift, write nothing
-    python3 scripts/render_handoff.py --project . --stdout MISSION.md
+    uv run --script scripts/render_handoff.py --project .            # write the files
+    uv run --script scripts/render_handoff.py --project . --check    # report drift, write nothing
+    uv run --script scripts/render_handoff.py --project . --stdout MISSION.md
 
 Renders, from the spec:
 
