@@ -15,6 +15,7 @@
 11. Refusals
 12. Model choice and switching
 13. Quick map: behavior to package part
+14. Detective work before judgment calls
 
 ## 1. How to use this file
 
@@ -311,3 +312,38 @@ package.
 | Delegates when invited | Cost | Subagent section of the rules, pinned models |
 | Dense reports | Owner cannot review | Report format, review script |
 | Refuses reasoning requests | Lost turns | Audit rule `reasoning-out` |
+| Asks instead of searching | The owner gets questions the project already answers; the run stalls | Judgment test in the mission and rules, `questions.py` refusing unsearched questions, readiness and stop gate checks |
+| Treats a judgment call as a blocker | All work stops for one decision | Park and continue: the question goes to the project's question system, the task waits, the rest of the run goes on |
+
+## 14. Detective work before judgment calls
+
+In real projects most of what looks like a judgment call is detective work.
+In one project, 175 of 183 open questions could be settled from evidence
+already there: drawing text, detail titles, labels, the project's own budget,
+existing rules, outside standards and back-tests against earlier work. A model
+that asks instead of searching hands the owner work the project already did,
+and an unattended run that waits on those answers stops for nothing.
+
+**The judgment test.** A question may go to the owner only if both hold:
+
+- (a) the evidence cannot decide it. The run searched every rung of the
+  evidence ladder in `fable/handoff.json` (the project's files and data, its
+  specs and standards, past decisions and rulings, the owner's notes and
+  communications, outside standards and references, back-tests against
+  earlier work) and recorded what each gave;
+- (b) it is a matter of policy or preference, not a fact.
+
+Every question raised records the evidence searched, what was found, why that
+does not decide it, and what answer would settle it. `fable/questions.py`,
+`decision_interview.py --check` and the readiness check refuse a question
+without that record. A question the evidence settles is answered by the
+preparing agent or the run and recorded as a decision "by evidence".
+
+**Park and continue.** A true judgment call during the run goes to the
+project's own question system (a BCF 3.0 topic, a row in the decisions table,
+a GitHub issue, or `fable/open_decisions.json`). The task is marked "waiting
+on owner" and the run continues with independent work. BLOCKED.md is only for
+problems that stop all work. The next run imports the answers and resumes.
+
+When concepts that should connect do not, run the gap analysis in
+`references/gap-analysis.md`. Its bridges are leads to check, never answers.

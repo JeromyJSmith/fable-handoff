@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import os
+import textwrap
 import shutil
 import py_compile
 import re
@@ -17,7 +19,7 @@ from conftest import (
 
 PACKAGE_FILES = [
     "fable/handoff.json", "fable/MISSION.md", "fable/OPERATING_RULES.md", "fable/STATE.md",
-    "fable/DECISIONS.md", "fable/launch.py", ".claude/hooks/fable_guard.py",
+    "fable/DECISIONS.md", "fable/launch.py", "fable/questions.py", ".claude/hooks/fable_guard.py",
     ".claude/hooks/fable_stop_gate.py", ".claude/hooks/fable_session_context.py",
     ".claude/agents/fable-scout.md", ".claude/agents/fable-builder.md",
     ".claude/agents/fable-worker.md", ".claude/agents/fable-specialist.md",
@@ -70,12 +72,21 @@ def test_required_files_exist_and_compile():
 
 
 def test_python_is_stdlib_only():
-    # Standard library, plus the skill's own scripts importing each other.
-    allowed = set(sys.stdlib_module_names) | {"__future__"} | {p.stem for p in SKILL.glob("scripts/*.py")}
+    # Standard library, plus the skill's own scripts importing each other. A
+    # script may use a third-party package only when its uv header pins it
+    # exactly (gap_analysis.py and networkx), and hooks never do.
+    base = set(sys.stdlib_module_names) | {"__future__"} | {p.stem for p in SKILL.glob("scripts/*.py")}
     sources = [*SKILL.glob("scripts/*.py"), *SKILL.glob("assets/**/*.py")]
     assert len(sources) >= 8
     for path in sources:
-        for match in re.finditer(r"^\s*(?:from|import)\s+([A-Za-z_][\w]*)", path.read_text(), flags=re.M):
+        text = path.read_text()
+        header = text.split("# ///", 2)[1]
+        pinned = re.findall(r'"([A-Za-z0-9_.-]+)==[0-9][^"]*"', header)
+        assert not re.search(r'"[A-Za-z0-9_.-]+(?:>=|<|~=|>)[^"]*"', header), f"{path.name} has an unpinned dependency"
+        if "hooks" in path.parts:
+            assert not pinned, f"hook {path.name} must stay stdlib only"
+        allowed = base | {name.replace("-", "_") for name in pinned}
+        for match in re.finditer(r"^\s*(?:from|import)\s+([A-Za-z_][\w]*)", text, flags=re.M):
             assert match.group(1) in allowed, f"{path.name} imports {match.group(1)}"
 
 
@@ -1034,7 +1045,10 @@ def test_preflight_drafts(tmp_path):
     assert "app_tests/**" in d["protected_paths"] and "docs/SPEC.md" in d["protected_paths"]
     assert any("slugify package failed" in t for t in d["traps_for_mission"])
     assert any("unicodedata worked" in t for t in d["what_worked"])
-    assert any("numbers be kept" in q for q in d["decision_candidates"])
+    # v1.2: detective work first. A question of fact is sorted as evidence, not sent to the owner.
+    triage = {t["question"]: t["kind"] for t in d["question_triage"]}
+    assert any("numbers be kept" in q and kind == "evidence" for q, kind in triage.items())
+    assert not any("numbers be kept" in q for q in d["decision_candidates"])
 
 
 def test_preflight_reports_instruction_problems_and_questions(tmp_path):
@@ -2165,6 +2179,19 @@ QUESTION = {
                 {"choice": "Drop numbers", "what_happens": "'10 Tips' becomes tips, and two posts can collide."}],
     "recommendation": "Keep numbers",
     "recommendation_reason": "It keeps titles distinct and readable.",
+    # The judgment test: every rung searched and recorded, and a matter of preference.
+    "kind": "judgment",
+    "nature": "preference",
+    "evidence": [
+        {"rung": "project files and data", "searched": "src/, app_tests/ and every existing slug", "found": "no slug with a number yet"},
+        {"rung": "specs and standards", "searched": "docs/SPEC.md", "found": "silent on numbers"},
+        {"rung": "past decisions and rulings", "searched": "fable/DECISIONS.md", "found": "nothing on numbers"},
+        {"rung": "owner notes and communications", "searched": "notes/ and the project README", "found": "nothing on numbers"},
+        {"rung": "outside standards and references", "searched": "RFC 3986 on URL paths", "found": "digits are allowed, so either choice is valid"},
+        {"rung": "back-tests against earlier work", "searched": "the old blog's slugs", "found": "kept numbers, but that blog had no collisions to weigh"},
+    ],
+    "why_not_decided": "Both choices are valid by every source; it is the owner's preference for readable addresses against fewer characters.",
+    "would_settle": "The owner choosing to keep or drop numbers.",
 }
 
 
@@ -2254,3 +2281,287 @@ def test_defaults_keep_the_run_off_main_and_permissions_unbypassed(tmp_path):
     init(project)
     cfg = read_cfg(project)
     assert cfg["permission_mode"] != "bypassPermissions" and cfg["branch"] not in ("main", "master")
+
+
+# --------------------------------------------------------------------------- 1.2: detective work, park and continue
+
+import zipfile
+import xml.etree.ElementTree as ET
+
+LADDER_RUNGS = ["project files and data", "specs and standards", "past decisions and rulings",
+                "owner notes and communications", "outside standards and references", "back-tests against earlier work"]
+
+
+def full_record(topic="Edge case policy", task=None, **changes):
+    record = {
+        "question": "How strict should slugify be with titles that are only punctuation?",
+        "topic": topic,
+        "what": "A title like '!!!' leaves nothing to put in a web address.",
+        "why_it_matters": "Raising an error stops publishing; a fallback slug lets it through with a generic address.",
+        "options": [{"choice": "Raise an error", "what_happens": "Publishing stops until the title changes."},
+                    {"choice": "Use a fallback slug", "what_happens": "The post gets an address like post-1."}],
+        "recommendation": "Raise an error",
+        "recommendation_reason": "A silent generic address is easy to miss.",
+        "kind": "judgment", "nature": "policy",
+        "evidence": [{"rung": r, "searched": "searched %s" % r, "found": "nothing that decides it"} for r in LADDER_RUNGS],
+        "why_not_decided": "Every source allows both; it is a publishing policy.",
+        "would_settle": "The owner choosing error or fallback.",
+    }
+    if task:
+        record["task"] = task
+    record.update(changes)
+    return record
+
+
+def questions(project, *args):
+    return run([*UV_SCRIPT, str(project / "fable/questions.py"), "--project", str(project), *args])
+
+
+def write_open(project, *records):
+    (project / "fable/open_decisions.json").write_text(json.dumps({"open_questions": list(records)}))
+
+
+def test_judgment_test_refuses_an_unsearched_question(tmp_path):
+    project = prepared_project(tmp_path)
+    unsearched = full_record(evidence=full_record()["evidence"][:2])
+    fact = full_record(topic="Slug length", nature=None)
+    write_open(project, unsearched, fact)
+    proc = questions(project, "check", "--json")
+    refused = json.loads(proc.stdout)["refused"]
+    assert proc.returncode == 1 and len(refused) == 2
+    assert "evidence not searched on" in refused[0]["problems"][0] and "back-tests against earlier work" in refused[0]["problems"][0]
+    assert any("question of fact is detective work" in p for p in refused[1]["problems"])
+    check = json.loads(interview(project, "--check", "--json").stdout)
+    assert check["ready"] == 0 and len(check["needs_writing_up"]) == 2
+    commit_all(project, "questions")
+    _, data = readiness(project)
+    assert statuses(data)["questions"] == "FAIL"
+    # parking refuses the same record
+    (tmp_path / "q.json").write_text(json.dumps(unsearched))
+    park = questions(project, "park", "--record", str(tmp_path / "q.json"), "--task", "Add edge case tests")
+    assert park.returncode == 2 and "judgment test is not met" in park.stderr
+    assert "waiting on owner" not in (project / "fable/STATE.md").read_text()
+
+
+def test_questions_the_evidence_settles_are_recorded_by_evidence(tmp_path):
+    project = prepared_project(tmp_path)
+    settled = {"question": "What is the maximum slug length?", "topic": "Maximum slug length", "kind": "evidence",
+               "answer": "80 characters",
+               "evidence": [{"rung": "specs and standards", "searched": "docs/SPEC.md", "found": "section 4 says slugs are cut at 80 characters"}]}
+    write_open(project, settled)
+    proc = interview(project, "--settle")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    decisions = (project / "fable/DECISIONS.md").read_text()
+    assert "Maximum slug length: 80 characters. Reason: settled by evidence (specs and standards: section 4 says" in decisions
+    assert json.loads((project / "fable/evidence_decisions.json").read_text())[0]["answer"] == "80 characters"
+    assert json.loads((project / "fable/open_decisions.json").read_text())["open_questions"] == []
+    review = run([*script("post_run_report.py"), "--project", str(project), "--skip-verify"]).stdout
+    assert "## Settled by evidence" in review and "### specs and standards (1)" in review
+
+
+def test_park_and_continue_through_the_stop_gate(tmp_path):
+    project = prepared_project(tmp_path)
+    (tmp_path / "q.json").write_text(json.dumps(full_record()))
+    proc = questions(project, "park", "--record", str(tmp_path / "q.json"), "--task", "Add edge case tests")
+    assert proc.returncode == 0, proc.stderr
+    state = (project / "fable/STATE.md").read_text()
+    assert "- [ ] Add edge case tests (waiting on owner: Edge case policy)" in state
+    first = gate(project)
+    assert first.returncode == 2 and "Implement slugify" in first.stderr and "Add edge case tests" not in first.stderr
+    (project / "fable/STATE.md").write_text(state.replace("- [ ] Implement slugify", "- [x] Implement slugify"))
+    (project / "fable/REPORT.md").write_text("Slugify is done.\n")
+    second = gate(project)
+    assert second.returncode == 2 and "Waiting on owner" in second.stderr and "Edge case policy" in second.stderr
+    assert "BLOCKED.md" in second.stderr
+    (project / "fable/REPORT.md").write_text("Slugify is done.\n\n## Waiting on owner\n\n- Edge case policy: blocks the edge case tests.\n")
+    assert gate(project).returncode == 0
+    assert not (project / "fable/BLOCKED.md").exists()
+
+
+def test_a_parked_task_without_a_complete_record_stays_open(tmp_path):
+    project = prepared_project(tmp_path)
+    write_open(project, full_record(why_not_decided=""))
+    state = (project / "fable/STATE.md").read_text()
+    (project / "fable/STATE.md").write_text(state.replace("- [ ] Implement slugify", "- [x] Implement slugify")
+                                            .replace("- [ ] Add edge case tests", "- [ ] Add edge case tests (waiting on owner: Edge case policy)"))
+    (project / "fable/REPORT.md").write_text("## Waiting on owner\n\n- Edge case policy\n")
+    proc = gate(project)
+    assert proc.returncode == 2 and "does not pass the judgment test" in proc.stderr and "missing why not decided" in proc.stderr
+
+
+def test_answers_are_imported_and_parked_tasks_resume(tmp_path):
+    project = prepared_project(tmp_path)
+    (tmp_path / "q.json").write_text(json.dumps(full_record()))
+    questions(project, "park", "--record", str(tmp_path / "q.json"), "--task", "Add edge case tests")
+    doc = json.loads((project / "fable/open_decisions.json").read_text())
+    q = doc["open_questions"].pop()
+    q.update(status="answered", answer="Raise an error")
+    doc["answered"] = [q]
+    (project / "fable/open_decisions.json").write_text(json.dumps(doc))
+    commit_all(project, "owner answered")
+    _, data = readiness(project)
+    assert statuses(data)["questions"] == "FAIL", "answers must be imported before launch"
+    proc = questions(project, "import")
+    assert proc.returncode == 0 and "Edge case policy" in proc.stdout
+    state = (project / "fable/STATE.md").read_text()
+    assert "waiting on owner" not in state and "- [ ] Add edge case tests (owner answered Edge case policy: Raise an error)" in state
+    assert "Edge case policy: Raise an error." in (project / "fable/DECISIONS.md").read_text()
+
+
+def test_bcf_question_system_round_trip(tmp_path):
+    project = bare_project(tmp_path)
+    assert init(project, "--question-system", "bcf:coordination/questions.bcf").returncode == 0
+    for rel, text in [("fable/MISSION.md", MISSION), ("fable/STATE.md", STATE), ("fable/DECISIONS.md", DECISIONS)]:
+        (project / rel).write_text(text)
+    (tmp_path / "q.json").write_text(json.dumps(full_record()))
+    assert questions(project, "park", "--record", str(tmp_path / "q.json"), "--task", "Add edge case tests").returncode == 0
+    bcf_path = project / "coordination/questions.bcf"
+    with zipfile.ZipFile(bcf_path) as bcf:
+        names = bcf.namelist()
+        assert 'VersionId="3.0"' in bcf.read("bcf.version").decode()
+        markups = [n for n in names if n.endswith("/markup.bcf")]
+        assert len(markups) == 1
+        topic = ET.fromstring(bcf.read(markups[0])).find("Topic")
+        assert topic.findtext("Title") == "Edge case policy" and topic.get("TopicStatus") == "Open" and topic.get("TopicType") == "Question"
+        assert "Searched outside standards and references" in topic.findtext("Description")
+        files = {n: bcf.read(n) for n in names}
+    # The owner answers in a BCF tool: a comment, the topic closed, and a viewpoint the tool added.
+    guid = markups[0].split("/")[0]
+    root = ET.fromstring(files[markups[0]])
+    topic = root.find("Topic")
+    topic.set("TopicStatus", "Closed")
+    comments = ET.SubElement(topic, "Comments")
+    comment = ET.SubElement(comments, "Comment", Guid="c1")
+    ET.SubElement(comment, "Date").text = "2026-11-20T10:00:00Z"
+    ET.SubElement(comment, "Author").text = "owner@example.com"
+    ET.SubElement(comment, "Comment").text = "Raise an error"
+    files[markups[0]] = ET.tostring(root)
+    files[guid + "/viewpoint.bcfv"] = b"<VisualizationInfo/>"
+    with zipfile.ZipFile(bcf_path, "w") as bcf:
+        for name, data in files.items():
+            bcf.writestr(name, data)
+    assert questions(project, "import").returncode == 0
+    assert "- [ ] Add edge case tests (owner answered Edge case policy: Raise an error)" in (project / "fable/STATE.md").read_text()
+    assert "Edge case policy: Raise an error." in (project / "fable/DECISIONS.md").read_text()
+    with zipfile.ZipFile(bcf_path) as bcf:
+        assert guid + "/viewpoint.bcfv" in bcf.namelist(), "the tool's viewpoint is kept"
+        topic = ET.fromstring(bcf.read(markups[0])).find("Topic")
+        assert topic.get("TopicStatus") == "Closed" and topic.find("Comments/Comment/Comment").text == "Raise an error"
+    status = json.loads(questions(project, "status").stdout)
+    assert status["counts"] == {"imported": 1}
+
+
+def test_interview_uses_the_projects_own_question_table_and_decisions_log(tmp_path):
+    project = bare_project(tmp_path)
+    (project / "docs").mkdir()
+    (project / "docs/decisions.md").write_text("# Project decisions\n\n## Made before the run\n\n- Use metric units. Reason: client standard.\n")
+    assert init(project, "--question-system", "markdown:docs/decisions.md", "--decisions-log", "docs/decisions.md").returncode == 0
+    (tmp_path / "q.json").write_text(json.dumps({**full_record(), **{k: v for k, v in QUESTION.items() if k not in ("kind", "nature", "evidence")}}))
+    assert questions(project, "park", "--record", str(tmp_path / "q.json")).returncode == 0
+    table = (project / "docs/decisions.md").read_text()
+    assert "## Questions for the owner" in table and "| Numbers in URL slugs |" in table and "| open |" in table
+    assert "Use metric units" in table
+    (tmp_path / "a.json").write_text(json.dumps({QUESTION["question"]: {"choice": "r"}}))
+    proc = interview(project, "--answers", str(tmp_path / "a.json"))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    after = (project / "docs/decisions.md").read_text()
+    assert "Numbers in URL slugs: Keep numbers. Reason:" in after and "| imported |" in after
+    assert "Numbers in URL slugs" not in (project / "fable/DECISIONS.md").read_text(), "no parallel copy"
+
+
+def test_github_question_system_through_gh(tmp_path):
+    project = prepared_project(tmp_path, question_system={"type": "github", "repo": "acme/site", "label": "fable-question"})
+    store = tmp_path / "issues.json"
+    store.write_text("[]")
+    bindir = tmp_path / "ghbin"
+    bindir.mkdir()
+    gh = bindir / "gh"
+    gh.write_text(textwrap.dedent(f"""\
+        #!/usr/bin/env -S uv run --script
+        # /// script
+        # requires-python = ">=3.11"
+        # ///
+        import json, sys
+        path = {str(store)!r}
+        issues = json.load(open(path))
+        args = sys.argv[1:]
+        def opt(name):
+            return args[args.index(name) + 1] if name in args else None
+        if args[:2] == ["issue", "list"]:
+            print(json.dumps(issues)); sys.exit(0)
+        if args[:2] == ["issue", "create"]:
+            issues.append({{"number": len(issues) + 1, "title": opt("--title"), "body": opt("--body"), "state": "OPEN",
+                           "labels": [{{"name": opt("--label")}}], "comments": []}})
+        elif args[:2] == ["issue", "comment"]:
+            issues[int(args[2]) - 1]["comments"].append({{"body": opt("--body")}})
+        elif args[:2] == ["issue", "close"]:
+            issues[int(args[2]) - 1]["state"] = "CLOSED"
+        elif args[:2] == ["issue", "edit"]:
+            issues[int(args[2]) - 1]["labels"].append({{"name": opt("--add-label")}})
+        json.dump(issues, open(path, "w"))
+        """))
+    gh.chmod(0o755)
+    env = {"PATH": "%s:%s" % (bindir, os.environ["PATH"])}
+    (tmp_path / "q.json").write_text(json.dumps(full_record()))
+    park = run([*UV_SCRIPT, str(project / "fable/questions.py"), "--project", str(project), "park", "--record", str(tmp_path / "q.json"),
+                "--task", "Add edge case tests"], env=env)
+    assert park.returncode == 0, park.stderr
+    issues = json.loads(store.read_text())
+    assert len(issues) == 1 and issues[0]["title"] == "Edge case policy" and "```fable-question" in issues[0]["body"]
+    issues[0]["comments"].append({"body": "Raise an error"})
+    issues[0]["state"] = "CLOSED"
+    store.write_text(json.dumps(issues))
+    assert run([*UV_SCRIPT, str(project / "fable/questions.py"), "--project", str(project), "import"], env=env).returncode == 0
+    assert "Edge case policy: Raise an error." in (project / "fable/DECISIONS.md").read_text()
+    assert {"name": "fable-imported"} in json.loads(store.read_text())[0]["labels"]
+
+
+def gap_project(tmp_path):
+    project = bare_project(tmp_path)
+    (project / "docs").mkdir()
+    (project / "docs/SPEC.md").write_text(
+        "# Spec\n\nThe planting plan uses native shrubs along the north border. Each shrub is irrigated by drip lines.\n"
+        "Drip irrigation zones follow the planting plan. Native shrubs need less irrigation after two years.\n\n"
+        "The budget covers paving, retaining walls and the patio. Paving cost is per square foot. Retaining walls are priced per linear foot.\n"
+        "The patio budget includes paving and lighting.\n")
+    return project
+
+
+def test_gap_analysis_fallback_finds_and_records_gaps(tmp_path):
+    project = gap_project(tmp_path)
+    gaps = lambda *a: run([*script("gap_analysis.py"), "--project", str(project), *a], timeout=300)
+    proc = gaps("--json", "--corpus-out", str(project / "fable/.run/corpus.txt"))
+    assert proc.returncode == 0, proc.stderr
+    record = json.loads(proc.stdout)
+    assert record["method"].startswith("built-in") and record["graph"]["components"] >= 2
+    disconnected = [g for g in record["gaps"] if g["kind"] == "disconnected"]
+    assert disconnected and "paving" in " ".join(disconnected[0]["between"]) and "shrub" in " ".join(disconnected[0]["between"])
+    assert "planting plan" in (project / "fable/.run/corpus.txt").read_text()
+    assert gaps("--close", disconnected[0]["id"]).returncode != 0, "closing needs the evidence"
+    assert gaps("--close", disconnected[0]["id"], "--how", "Budget sheet line 12 covers planting; linked.").returncode == 0
+    assert gaps("--add", "drawing labels | budget lines", "--lead", "Do the labels match budget items?").returncode == 0
+    saved = json.loads((project / "fable/gaps.json").read_text())
+    assert saved["gaps"][0]["status"] == "closed" and saved["gaps"][-1]["source"] == "infranodus"
+    assert "never a decision" in (project / "fable/GAPS.md").read_text()
+    init(project)
+    review = run([*script("post_run_report.py"), "--project", str(project), "--skip-verify"]).stdout
+    assert "## Gaps found and bridged" in review and "Budget sheet line 12" in review
+
+
+def test_preflight_reports_evidence_and_judgment_counts(tmp_path):
+    project = full_inputs_project(tmp_path)
+    (project / "docs/QUESTIONS.md").write_text("# Open questions\n\n- TBD: which brand tone do we want for error messages?\n")
+    proc, data = preflight(project)
+    kinds = [t["kind"] for t in data["drafts"]["question_triage"]]
+    assert "evidence" in kinds and "judgment" in kinds
+    report = (project / "fable/PREFLIGHT.md").read_text()
+    assert re.search(r"Open questions: \d+ evidence can settle, \d+ judgment", report)
+
+
+def test_instructions_carry_the_judgment_test_and_park_and_continue():
+    for rel in ["assets/templates/MISSION.md", "assets/templates/OPERATING_RULES.md", "references/fable-behaviors.md"]:
+        text = (SKILL / rel).read_text()
+        assert "evidence ladder" in text and "policy or preference" in text, rel
+    rules = (SKILL / "assets/templates/OPERATING_RULES.md").read_text()
+    assert "fable/questions.py park" in rules and "BLOCKED.md is only for a problem that stops all work" in rules
+    assert "never a decision" in (SKILL / "references/gap-analysis.md").read_text()

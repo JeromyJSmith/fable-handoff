@@ -25,6 +25,7 @@ import copy
 import datetime
 import difflib
 import hashlib
+import importlib.util
 import json
 import shutil
 import sys
@@ -49,6 +50,7 @@ DEFAULT_PROTECTED_PATHS = [
     "fable/MISSION.md",
     "fable/OPERATING_RULES.md",
     "fable/launch.py",
+    "fable/questions.py",
     "fable/handoff_spec.json",
     "fable/.run/**",
 ]
@@ -96,6 +98,7 @@ DENY_RULES = ["Read(./.env)", "Read(./.env.*)"]
 # --refresh-hooks replaces exactly these files and nothing else.
 CODE_FILES = {
     "fable/launch.py": ASSETS / "templates" / "launch.py",
+    "fable/questions.py": ASSETS / "templates" / "questions.py",
     ".claude/hooks/fable_guard.py": ASSETS / "hooks" / "fable_guard.py",
     ".claude/hooks/fable_stop_gate.py": ASSETS / "hooks" / "fable_stop_gate.py",
     ".claude/hooks/fable_session_context.py": ASSETS / "hooks" / "fable_session_context.py",
@@ -124,6 +127,9 @@ def parse_args():
     parser.add_argument("--ownership", action="store_true", help="tell the model the codebase is its own, so that it refactors as it goes. Leave off for client or shared code.")
     parser.add_argument("--force", action="store_true", help="overwrite existing package files, including a mission and ledger you have filled in. Commit first.")
     parser.add_argument("--from-preflight", action="store_true", help="use fable/preflight.json from preflight.py: its verify command when --verify-command is not given, its paths to protect, and its open acceptance criteria as the first tasks in fable/STATE.md. Check each before launch.")
+    parser.add_argument("--question-system", default="json:fable/open_decisions.json", metavar="TYPE:WHERE",
+                        help="where questions for the owner live: json:<path> (default fable/open_decisions.json), bcf:<path to .bcf>, markdown:<path to the decisions file>, or github:<owner/repo>")
+    parser.add_argument("--decisions-log", default=None, metavar="PATH", help="the project's own decisions log; decisions are written there instead of fable/DECISIONS.md")
     parser.add_argument("--apply-settings", action="store_true", help="write the .claude/settings.json change shown in the diff without asking. Without it, an interactive terminal is asked, and anything else gets the diff and fable/settings.proposed.json, with settings left untouched.")
     parser.add_argument("--uninstall", action="store_true", help="remove the hooks this skill registered and installed, restoring the settings backup when settings were not changed since. Leaves fable/ (mission, ledger, decisions) alone.")
     parser.add_argument("--refresh-hooks", action="store_true", help="in a project that already has a package, replace the three hooks and fable/launch.py with the skill's current copies and touch nothing else. The other options are ignored.")
@@ -303,6 +309,20 @@ def seed_state(template, tasks):
     return "\n".join(out) + "\n"
 
 
+def question_system(value):
+    kind, _, where = (value or "json:fable/open_decisions.json").partition(":")
+    if kind not in ("json", "bcf", "markdown", "github") or not where:
+        fail("--question-system must be json:<path>, bcf:<path>, markdown:<path> or github:<owner/repo>, not %r." % value)
+    return {"type": kind, "repo": where, "label": "fable-question"} if kind == "github" else {"type": kind, "path": where}
+
+
+def default_ladder():
+    spec = importlib.util.spec_from_file_location("fable_questions", ASSETS / "templates" / "questions.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.DEFAULT_LADDER
+
+
 def build_config(args, verify_timeout, extra_protected=()):
     protected = list(DEFAULT_PROTECTED_PATHS) + [p for p in extra_protected if p not in DEFAULT_PROTECTED_PATHS]
     return {
@@ -323,6 +343,9 @@ def build_config(args, verify_timeout, extra_protected=()):
         "max_budget_usd": args.max_budget_usd,
         "max_turns": None,
         "audit_accept": [],
+        "evidence_ladder": default_ladder(),
+        "question_system": question_system(args.question_system),
+        "decisions_log": args.decisions_log,
         "extra_cli_args": [],
     }
 
