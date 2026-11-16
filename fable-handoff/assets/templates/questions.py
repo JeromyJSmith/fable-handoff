@@ -23,6 +23,7 @@ Commands (run from the project root):
     uv run --script fable/questions.py settle                # answer evidence questions, recorded "by evidence"
     uv run --script fable/questions.py import                # bring in the owner's answers, resume parked tasks
     uv run --script fable/questions.py status
+    uv run --script fable/questions.py route                 # act on case verdicts (fable/detective.py)
 
 Where questions live is set by "question_system" in fable/handoff.json:
     {"type": "json", "path": "fable/open_decisions.json"}      (default)
@@ -57,6 +58,11 @@ DEFAULT_SYSTEM = {"type": "json", "path": "fable/open_decisions.json"}
 NATURES = ("policy", "preference")
 PARKED = re.compile(r"\(waiting on owner: ([^)]+)\)")
 REQUIRED_TEXT = ["question", "topic", "why_not_decided", "would_settle"]
+# Owner-facing text is written in words: no bare codes like D3, Q-12 or rule 12.
+BARE_ID = re.compile(
+    r"(?<![\w.])[A-Z]{1,3}-?\d{1,4}(?![\w.])|(?i:\b(?:decision|question|item|option|issue|ticket|rule)\s*#?\d+\b)|(?<![\w&])#\d+\b"
+)
+OWNER_FACING = ["question", "topic", "what", "why_it_matters", "recommendation", "recommendation_reason", "why_not_decided", "would_settle"]
 
 
 # --------------------------------------------------------------------------- config
@@ -103,6 +109,10 @@ def record_problems(q: dict, rungs: list[str]) -> list[str]:
     for item in q.get("evidence") or []:
         if isinstance(item, dict) and str(item.get("searched") or "").strip() and str(item.get("found") or "").strip():
             searched[str(item.get("rung"))] = item
+    texts = [str(q.get(k) or "") for k in OWNER_FACING] + ["%s %s" % (o.get("choice", ""), o.get("what_happens", "")) for o in q.get("options") or [] if isinstance(o, dict)]
+    codes = sorted({m.group(0) for t in texts for m in BARE_ID.finditer(t)})
+    if codes:
+        out.append("the owner would have to look up %s; write it out in words" % ", ".join(codes))
     missing = [r for r in rungs if r not in searched]
     if missing:
         out.append("evidence not searched on: " + "; ".join(missing) + " (record what was searched and what was found on each rung, even when nothing was found)")
@@ -521,6 +531,61 @@ def cmd_import(project: Path, config: dict) -> int:
     return 0
 
 
+def detective(project: Path):
+    """fable/detective.py next to this file, or the skill's copy."""
+    import importlib.util
+    path = Path(__file__).resolve().parent / "detective.py"
+    if not path.exists():
+        path = project / "fable" / "detective.py"
+    spec = importlib.util.spec_from_file_location("fable_detective", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def cmd_route(project: Path, config: dict) -> int:
+    """Act on each case's verdict: settled ones become decisions, policy ones go to the owner, facts stay in the queue."""
+    dm = detective(project)
+    cases = dm.recompute(project, config)
+    store, rungs = system(project, config), rung_names(config)
+    records = store.load()
+    decided, parked, queued, refused = [], [], [], []
+    for c in cases:
+        if c.get("routed"):
+            continue
+        v = c["result"]
+        if v["verdict"] in ("settled", "settled by adjudication"):
+            how = "by evidence" if v["verdict"] == "settled" else "by adjudication"
+            write_decision(project, config, "- %s: %s. Reason: settled %s (%s)." % (c.get("subject") or c.get("question"), v["answer"], how, v["why"]))
+            log_evidence_decision(project, {"topic": c.get("subject"), "question": c.get("question"), "answer": v["answer"],
+                                            "evidence": [{"rung": e.get("rung") or e.get("function"), "found": e.get("found"), "source": e.get("source")} for e in c.get("evidence", [])],
+                                            "verdict": v["verdict"]})
+            c["routed"] = how
+            decided.append(c.get("id"))
+        elif v["verdict"] == "open, policy":
+            q = c.get("owner_question") or {}
+            q = dict(q, kind="judgment", case=c.get("id"), case_why=v["why"])
+            problems = record_problems(q, rungs)
+            if problems:
+                refused.append((c.get("id"), problems))
+                continue
+            records = [r for r in records if record_id(r) != record_id(q)] + [dict(q, status="open")]
+            if q.get("task"):
+                park_task(project, q["task"], q["topic"])
+            c["routed"] = "to the owner"
+            parked.append(c.get("id"))
+        elif v["verdict"] == "open, fact":
+            queued.append(c.get("id"))
+        else:
+            refused.append((c.get("id"), [v["why"]]))
+    store.save(records)
+    dm.save_cases(project, cases, config)
+    print("%d decided, %d to the owner, %d back in the queue, %d refused." % (len(decided), len(parked), len(queued), len(refused)))
+    for cid, problems in refused:
+        print("- %s: %s" % (cid, "; ".join(problems)))
+    return 1 if refused else 0
+
+
 def cmd_status(project: Path, config: dict) -> int:
     records = system(project, config).load()
     counts = {}
@@ -532,7 +597,7 @@ def cmd_status(project: Path, config: dict) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Questions for the owner: the judgment test, parking and the project's question system.")
-    parser.add_argument("command", choices=["check", "park", "settle", "import", "status"])
+    parser.add_argument("command", choices=["check", "park", "settle", "import", "status", "route"])
     parser.add_argument("--project", help="project root (default: found from the current directory)")
     parser.add_argument("--record", help="park: a JSON file with the question record")
     parser.add_argument("--task", help="park: the start of the task line in fable/STATE.md that waits on this question")
@@ -550,6 +615,8 @@ def main() -> int:
         return cmd_settle(project, config)
     if args.command == "import":
         return cmd_import(project, config)
+    if args.command == "route":
+        return cmd_route(project, config)
     return cmd_status(project, config)
 
 

@@ -51,6 +51,7 @@ DEFAULT_PROTECTED_PATHS = [
     "fable/OPERATING_RULES.md",
     "fable/launch.py",
     "fable/questions.py",
+    "fable/detective.py",
     "fable/handoff_spec.json",
     "fable/.run/**",
 ]
@@ -99,6 +100,7 @@ DENY_RULES = ["Read(./.env)", "Read(./.env.*)"]
 CODE_FILES = {
     "fable/launch.py": ASSETS / "templates" / "launch.py",
     "fable/questions.py": ASSETS / "templates" / "questions.py",
+    "fable/detective.py": ASSETS / "templates" / "detective.py",
     ".claude/hooks/fable_guard.py": ASSETS / "hooks" / "fable_guard.py",
     ".claude/hooks/fable_stop_gate.py": ASSETS / "hooks" / "fable_stop_gate.py",
     ".claude/hooks/fable_session_context.py": ASSETS / "hooks" / "fable_session_context.py",
@@ -316,11 +318,15 @@ def question_system(value):
     return {"type": kind, "repo": where, "label": "fable-question"} if kind == "github" else {"type": kind, "path": where}
 
 
-def default_ladder():
-    spec = importlib.util.spec_from_file_location("fable_questions", ASSETS / "templates" / "questions.py")
+def template_module(name):
+    spec = importlib.util.spec_from_file_location("fable_" + name, ASSETS / "templates" / (name + ".py"))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.DEFAULT_LADDER
+    return module
+
+
+def default_ladder():
+    return template_module("questions").DEFAULT_LADDER
 
 
 def build_config(args, verify_timeout, extra_protected=()):
@@ -346,6 +352,9 @@ def build_config(args, verify_timeout, extra_protected=()):
         "evidence_ladder": default_ladder(),
         "question_system": question_system(args.question_system),
         "decisions_log": args.decisions_log,
+        "detective_functions": template_module("detective").DEFAULT_FUNCTIONS,
+        "quantity_tolerance": {"default_pct": 2.0},
+        "adjudication_threshold": 0.70,
         "extra_cli_args": [],
     }
 

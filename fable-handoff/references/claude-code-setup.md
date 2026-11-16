@@ -345,6 +345,9 @@ nohup uv run --script fable/launch.py > fable/.run/launch.out 2>&1 &
 | `audit_accept` | [] | `"<file>:<rule id>"` entries that the rules audit treats as accepted |
 | `evidence_ladder` | six rungs | Where the run searches before any question may go to the owner: `[{"rung", "look_in"}]`. Name the real places for each rung in this project. Every question record must cover every rung |
 | `question_system` | `{"type": "json", "path": "fable/open_decisions.json"}` | Where judgment calls are parked: `bcf` (a BCF 3.0 file), `markdown` (a table in the decisions file), `github` (`repo`, `label`, through gh) or `json`. Set with `--question-system` |
+| `detective_functions` | ten generic functions | The detective standard's registry: `name`, `looks_at`, `returns`, `strength` (lead, supporting, strong, decisive), `status` (built or planned), `test`. Evidence from anything else is refused. See `detective-standard.md` |
+| `quantity_tolerance` | `{"default_pct": 2.0}` | How close a measured and a stated quantity must be, after unit conversion, to count as strong; per dimension (`area`, `length`, `volume`, `count`) or `default_pct` |
+| `adjudication_threshold` | 0.70 | Confidence an adjudicator needs to settle a likely case, until `fable/calibration.json` from the back-test replaces it |
 | `decisions_log` | null | The project's own decisions log; decisions go there instead of `fable/DECISIONS.md`. Set with `--decisions-log` |
 | `extra_cli_args` | [] | Extra flags appended to the CLI command. Never `--bare`, which skips the hooks |
 | `mcp_config` | none | Path, inside the project, to an MCP config JSON passed as `--mcp-config`, for example one that adds InfraNodus. The readiness check validates it, and the launcher logs any server that does not connect |

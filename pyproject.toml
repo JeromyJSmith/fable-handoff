@@ -1,6 +1,6 @@
 [project]
 name = "fable-handoff"
-version = "1.2.0"
+version = "1.3.0"
 description = "Claude Code skill: prepare a project for a long unattended Claude Fable 5.2 run, then launch, watch and review it."
 readme = "README.md"
 license = "MIT"

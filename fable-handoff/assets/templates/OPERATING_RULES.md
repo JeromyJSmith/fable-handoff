@@ -22,6 +22,10 @@ Most questions that look like judgment calls are detective work: the answer is a
 
 Search the ladder in order: the project's own files and data (drawing text, detail titles, labels, schedules, the project's budget, code), its specs and standards, past decisions and rulings, the owner's notes and communications that your connectors and files reach, outside standards and references, and back-tests against earlier work. When things that should connect do not, run the gap analysis (references in fable/handoff.json; `gap_analysis.py` or the InfraNodus connector when it is available) and verify each bridge it suggests against the evidence. A bridge is a lead, never a decision. Record how each gap was closed.
 
+## Cases and verdicts
+
+Investigate each question as a case in fable/cases.json, following the detective standard: evidence only from the functions registered in fable/handoff.json, each item naming the underlying source it read, its strength and the candidate it supports. Never choose a verdict yourself; run `uv run --script fable/detective.py verdicts`, then `uv run --script fable/questions.py route` to record the settled ones and send the policy ones to the owner. Two functions reading the same label are one source. A lead is never evidence. An open fact goes back to the queue with what would settle it.
+
 ## Park and continue
 
 When a task truly needs a judgment call, do not stop and do not guess. Write the question record to a JSON file: question, topic, what, why_it_matters, options (each with what_happens), recommendation and recommendation_reason, kind "judgment", nature "policy" or "preference", evidence (one entry per rung: rung, searched, found), why_not_decided and would_settle. Then:

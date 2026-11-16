@@ -383,3 +383,11 @@ missing report ("report").
 - `gap_analysis.py` writes `fable/gaps.json` and `fable/GAPS.md`; `--close` needs `--how`.
 - The post-run review has the sections "Settled by evidence", "Parked for the owner" and "Gaps found and bridged".
 
+## 1.3: the detective standard
+
+- `fable/detective.py` (installed by init) holds the case model, the registry check, quantity agreement and the verdict rules; `verdicts` writes `fable/cases.json` results and `fable/CASES.md`.
+- `fable/handoff.json` carries `detective_functions`, `quantity_tolerance` and `adjudication_threshold`.
+- `questions.py route` turns verdicts into decisions, owner questions or queue entries.
+- `scripts/detective_backtest.py` scores the standard blind on decided cases and writes `fable/backtest.json`, `fable/BACKTEST.md` and, with `--write-calibration`, `fable/calibration.json`.
+- Readiness rows "detective functions" and "cases"; review section "Cases and verdicts".
+

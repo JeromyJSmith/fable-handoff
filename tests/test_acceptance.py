@@ -19,7 +19,7 @@ from conftest import (
 
 PACKAGE_FILES = [
     "fable/handoff.json", "fable/MISSION.md", "fable/OPERATING_RULES.md", "fable/STATE.md",
-    "fable/DECISIONS.md", "fable/launch.py", "fable/questions.py", ".claude/hooks/fable_guard.py",
+    "fable/DECISIONS.md", "fable/launch.py", "fable/questions.py", "fable/detective.py", ".claude/hooks/fable_guard.py",
     ".claude/hooks/fable_stop_gate.py", ".claude/hooks/fable_session_context.py",
     ".claude/agents/fable-scout.md", ".claude/agents/fable-builder.md",
     ".claude/agents/fable-worker.md", ".claude/agents/fable-specialist.md",
@@ -2565,3 +2565,152 @@ def test_instructions_carry_the_judgment_test_and_park_and_continue():
     rules = (SKILL / "assets/templates/OPERATING_RULES.md").read_text()
     assert "fable/questions.py park" in rules and "BLOCKED.md is only for a problem that stops all work" in rules
     assert "never a decision" in (SKILL / "references/gap-analysis.md").read_text()
+
+
+# --------------------------------------------------------------------------- 1.3: the detective standard
+
+def ev(function, source, supports, strength=None, **extra):
+    item = {"function": function, "source": source, "supports": supports, "found": "%s says %s" % (source, supports)}
+    if strength:
+        item["strength"] = strength
+    item.update(extra)
+    return item
+
+
+def detective_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("fable_detective_test", SKILL / "assets/templates/detective.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+CASE = {"id": "case-pool-wall", "subject": "Layer WALL-P", "question": "Which budget line does layer WALL-P belong to?",
+        "candidates": ["Pool wall", "Retaining wall"]}
+
+
+def test_verdict_rules():
+    dm = detective_module()
+    cfg = {}
+    v = lambda *evidence, **more: dm.verdict(dict(CASE, evidence=list(evidence), **more), cfg)
+    # a decisive source settles it
+    assert v(ev("rules and precedent", "decisions.md: pools", "Pool wall"))["verdict"] == "settled"
+    # two independent strong sources agree
+    r = v(ev("name match", "layer name WALL-P", "Pool wall"), ev("text in documents", "detail 4 title", "Pool wall"))
+    assert r["verdict"] == "settled" and r["answer"] == "Pool wall"
+    # two functions reading the same label are one source: likely, not settled
+    r = v(ev("name match", "label 'POOL WALL'", "Pool wall"), ev("text in documents", "label 'POOL WALL'", "Pool wall"))
+    assert r["verdict"] == "likely"
+    # leads never count, and supporting alone does not settle
+    r = v(ev("gap analysis", "gap-1", "Pool wall"), ev("content", "12 wall objects", "Pool wall"))
+    assert r["verdict"] == "open, fact" and r["would_settle"]
+    # strong against strong: more evidence needed
+    assert v(ev("name match", "layer name", "Pool wall"), ev("text in documents", "sheet note", "Retaining wall"))["verdict"] == "open, fact"
+    # decisive against decisive: the rules conflict, so it is the owner's call
+    r = v(ev("rules and precedent", "standard 3.2", "Pool wall"), ev("rules and precedent", "ruling of March 4", "Retaining wall"))
+    assert r["verdict"] == "open, policy" and "conflict" in r["why"]
+    # nothing strong and a matter of preference: policy
+    assert v(ev("content", "objects", "Pool wall"), nature="preference")["verdict"] == "open, policy"
+    # unregistered function, planned function and missing source are refused
+    assert v(ev("hunch", "gut", "Pool wall"))["verdict"] == "invalid"
+    assert v(ev("owner's own words", "email", "Pool wall"))["verdict"] == "invalid"
+    assert v({"function": "name match", "supports": "Pool wall"})["verdict"] == "invalid"
+
+
+def test_quantities_count_only_within_tolerance():
+    dm = detective_module()
+    cfg = {"quantity_tolerance": {"default_pct": 2.0}}
+    agree, why = dm.quantity_agrees({"measured": 4530, "measured_unit": "sf", "stated": 420.85, "stated_unit": "m2"}, cfg)
+    assert agree, why
+    assert not dm.quantity_agrees({"measured": 4530, "measured_unit": "sf", "stated": 4000, "stated_unit": "sf"}, cfg)[0]
+    assert not dm.quantity_agrees({"measured": 10, "measured_unit": "lf", "stated": 10, "stated_unit": "sf"}, cfg)[0]
+    near = ev("quantity match", "budget line 12", "Pool wall", quantity={"measured": 4530, "measured_unit": "sf", "stated": 4500, "stated_unit": "sf"})
+    far = ev("quantity match", "budget line 12", "Pool wall", quantity={"measured": 4530, "measured_unit": "sf", "stated": 3000, "stated_unit": "sf"})
+    other = ev("name match", "layer name", "Pool wall")
+    assert dm.verdict(dict(CASE, evidence=[near, other]), cfg)["verdict"] == "settled"
+    assert dm.verdict(dict(CASE, evidence=[far, other]), cfg)["verdict"] == "likely", "a disagreeing quantity only supports"
+
+
+def test_adjudication_settles_only_above_the_threshold_and_is_kept_apart(tmp_path):
+    dm = detective_module()
+    project = tmp_path
+    (project / "fable").mkdir()
+    one_strong = [ev("name match", "layer name", "Pool wall"), ev("content", "objects", "Retaining wall")]
+    low = dict(CASE, evidence=one_strong, adjudication={"by": "adjudicator", "answer": "Pool wall", "confidence": 0.6, "reasoning": "layer and shape"})
+    high = dict(low, adjudication=dict(low["adjudication"], confidence=0.8))
+    assert dm.verdict(low, {}, project)["verdict"] == "likely"
+    r = dm.verdict(high, {}, project)
+    assert r["verdict"] == "settled by adjudication" and "uncalibrated" in r["why"]
+    (project / "fable/calibration.json").write_text(json.dumps({"threshold": 0.85, "cases": 40, "date": "2026-11-16"}))
+    assert dm.verdict(high, {}, project)["verdict"] == "likely", "the calibrated threshold replaces the default"
+
+
+def test_cases_are_routed_by_verdict(tmp_path):
+    project = prepared_project(tmp_path)
+    policy_q = full_record(topic="Pool wall budget split", task="Add edge case tests")
+    cases = [
+        dict(CASE, id="settled-one", evidence=[ev("rules and precedent", "decisions.md line 4", "Pool wall")]),
+        dict(CASE, id="fact-one", subject="Layer WALL-X", evidence=[ev("content", "objects", "Pool wall")]),
+        dict(CASE, id="policy-one", subject="Layer WALL-Y", evidence=[ev("rules and precedent", "standard 3.2", "Pool wall"),
+                                                                       ev("rules and precedent", "ruling of March 4", "Retaining wall")],
+             owner_question=policy_q),
+    ]
+    (project / "fable/cases.json").write_text(json.dumps(cases))
+    proc = questions(project, "route")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "1 decided, 1 to the owner, 1 back in the queue" in proc.stdout
+    assert "Layer WALL-P: Pool wall. Reason: settled by evidence (decisive source: decisions.md line 4)." in (project / "fable/DECISIONS.md").read_text()
+    open_q = json.loads((project / "fable/open_decisions.json").read_text())["open_questions"]
+    assert open_q[0]["topic"] == "Pool wall budget split" and "conflict" in open_q[0]["case_why"]
+    assert "(waiting on owner: Pool wall budget split)" in (project / "fable/STATE.md").read_text()
+    md = (project / "fable/CASES.md").read_text()
+    assert "Verdict: **open, fact**" in md and "What would settle it:" in md
+    review = run([*script("post_run_report.py"), "--project", str(project), "--skip-verify"]).stdout
+    assert "## Cases and verdicts" in review and "Layer WALL-X: open, fact" in review
+
+
+def test_owner_questions_refuse_bare_codes(tmp_path):
+    project = prepared_project(tmp_path)
+    (tmp_path / "q.json").write_text(json.dumps(full_record(why_not_decided="Rule 12 and D121 both allow it.")))
+    proc = questions(project, "park", "--record", str(tmp_path / "q.json"))
+    assert proc.returncode == 2 and "D121" in proc.stderr and "Rule 12" in proc.stderr
+
+
+def test_backtest_is_blind_scores_functions_and_calibrates(tmp_path):
+    project = prepared_project(tmp_path)
+    decided = []
+    for i in range(10):
+        right = "Pool wall"
+        decided.append(dict(CASE, id="d%d" % i, owner_answer=right, ruling_sources=["decisions.md line %d" % i],
+                            evidence=[ev("rules and precedent", "decisions.md line %d" % i, right),
+                                      ev("name match", "layer %d" % i, right),
+                                      ev("text in documents", "detail %d" % i, right if i < 8 else "Retaining wall")],
+                            adjudication={"answer": right if i < 9 else "Retaining wall", "confidence": 0.5 + i * 0.05}))
+    (tmp_path / "decided.json").write_text(json.dumps(decided))
+    proc = run([*script("detective_backtest.py"), "--project", str(project), "--cases", str(tmp_path / "decided.json"),
+                "--json", "--write-calibration", "--target", "0.75"])
+    assert proc.returncode == 0, proc.stderr
+    report = json.loads(proc.stdout)
+    assert report["evidence_removed_as_the_cases_own_ruling"] == 10, "each case's own ruling is hidden"
+    funcs = {f["function"]: f for f in report["functions"]}
+    assert "rules and precedent" not in funcs
+    assert funcs["name match"]["accuracy"] == 1.0 and funcs["text in documents"]["accuracy"] == 0.8
+    assert report["outcome"] == {"right": 8, "wrong": 0, "open": 2, "invalid": 0}
+    assert report["calibration"]["threshold"] is not None
+    assert json.loads((project / "fable/calibration.json").read_text())["threshold"] == report["calibration"]["threshold"]
+    assert "Where it went wrong" not in (project / "fable/BACKTEST.md").read_text()
+
+
+def test_readiness_checks_the_registry_and_cases(tmp_path):
+    project = prepared_project(tmp_path)
+    cfg = read_cfg(project)
+    cfg["detective_functions"][0]["test"] = ""
+    write_cfg(project, detective_functions=cfg["detective_functions"])
+    commit_all(project, "registry")
+    _, data = readiness(project)
+    assert statuses(data)["detective functions"] == "FAIL"
+    write_cfg(project, detective_functions=detective_module().DEFAULT_FUNCTIONS)
+    (project / "fable/cases.json").write_text(json.dumps([dict(CASE, evidence=[ev("hunch", "gut", "Pool wall")])]))
+    commit_all(project, "case")
+    _, data = readiness(project)
+    assert statuses(data)["cases"] == "FAIL"

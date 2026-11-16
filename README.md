@@ -34,16 +34,16 @@ Install a release tag. `main` can change at any time.
 
 ```bash
 # Recommended: a tagged release, into ~/.claude/skills/fable-handoff
-curl -fsSL https://raw.githubusercontent.com/JeromyJSmith/fable-handoff/v1.2.0/install.sh | bash -s -- --ref v1.2.0
+curl -fsSL https://raw.githubusercontent.com/JeromyJSmith/fable-handoff/v1.3.0/install.sh | bash -s -- --ref v1.3.0
 
 # Into the current repo's .claude/skills instead
-curl -fsSL https://raw.githubusercontent.com/JeromyJSmith/fable-handoff/v1.2.0/install.sh | bash -s -- --ref v1.2.0 --project
+curl -fsSL https://raw.githubusercontent.com/JeromyJSmith/fable-handoff/v1.3.0/install.sh | bash -s -- --ref v1.3.0 --project
 
 # As a Claude Code plugin (2.1.275 or later)
 /plugin install fable-handoff --marketplace JeromyJSmith/fable-handoff
 
 # By hand
-git clone --branch v1.2.0 https://github.com/JeromyJSmith/fable-handoff && cp -R fable-handoff/fable-handoff ~/.claude/skills/
+git clone --branch v1.3.0 https://github.com/JeromyJSmith/fable-handoff && cp -R fable-handoff/fable-handoff ~/.claude/skills/
 ```
 
 The installer checks for git and uv, prints the exact commit it installed,
@@ -107,6 +107,20 @@ answers the first kind and records them "by evidence"
 not, `gap_analysis.py` finds the unconnected concepts (InfraNodus when
 connected, else a built-in graph) and suggests bridges to verify.
 
+## The detective standard
+
+Detective work is defined, not assumed. Each investigation is a case with a
+subject, a question, candidate answers, evidence and a computed verdict.
+Evidence comes only from detective functions registered in
+`fable/handoff.json` (what each looks at, what it returns, how strong it is,
+whether it is built, its test). The rules: a decisive source, or two
+independent strong sources that agree, settle a case; one strong source makes
+it likely, and an adjudicator may settle it only above a threshold calibrated
+on cases you already decided; missing or conflicting evidence leaves an open
+fact with what would settle it; only your own choice, or rules that conflict,
+reach you. `detective_backtest.py` runs the standard blind on decided cases
+and scores every function. See `fable-handoff/references/detective-standard.md`.
+
 ## Park and continue
 
 A true judgment call during the run does not stop it. `fable/questions.py
@@ -143,7 +157,7 @@ terminal.
 | --- | --- |
 | `fable-handoff/SKILL.md` | The procedure |
 | `fable-handoff/references/` | Deeper guides; `sources.md` lists the Anthropic docs each rule depends on |
-| `fable-handoff/scripts/` | Preflight, decision interview, gap analysis, init and uninstall, readiness, spec, context, report and audit tools |
+| `fable-handoff/scripts/` | Preflight, decision interview, gap analysis, detective back-test, init and uninstall, readiness, spec, context, report and audit tools |
 | `fable-handoff/assets/` | Hooks, agents, templates, jq modules, JSON Schema |
 | `fable-handoff/evals/` | Behavior cases for `claude plugin eval` |
 | `tests/`, `pyproject.toml`, `uv.lock` | Acceptance suite, run with `uv run pytest` |
@@ -164,7 +178,7 @@ set `FABLE_HANDOFF_SKILL_DIR=/path/to/fable-handoff`.
 
 1. Update `CHANGELOG.md` and the version in `pyproject.toml` and `.claude-plugin/*.json`.
 2. Run `uv run pytest`.
-3. Tag and push: `git tag -a v1.2.0 -m "fable-handoff 1.2.0" && git push origin v1.2.0`.
+3. Tag and push: `git tag -a v1.3.0 -m "fable-handoff 1.3.0" && git push origin v1.3.0`.
 4. Point the install commands in this README at the new tag.
 
 ## Keeping it correct

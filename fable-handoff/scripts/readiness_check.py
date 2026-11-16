@@ -382,6 +382,36 @@ def check_questions(project, config):
     return rows + [("PASS", "questions", "no open questions in the question system")]
 
 
+def check_detective(project, config):
+    """The function registry is complete, every case is valid, and adjudication is calibrated before it settles anything."""
+    import importlib.util
+    path = project / "fable" / "detective.py"
+    if not path.exists():
+        path = SCRIPTS.parent / "assets" / "templates" / "detective.py"
+    spec = importlib.util.spec_from_file_location("fable_detective", path)
+    dm = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(dm)
+    problems = dm.registry_problems(config)
+    if problems:
+        return [("FAIL", "detective functions", "; ".join(problems[:4]) + ". Describe every function before it is used.")]
+    rows = [("PASS", "detective functions", "%d registered: %s" % (len(dm.registry(config)), short_list(dm.registry(config))))]
+    cases = dm.load_cases(project)
+    if not cases:
+        return rows
+    results = [(c, dm.verdict(c, config, project)) for c in cases]
+    invalid = [(c, r) for c, r in results if r["verdict"] == "invalid"]
+    if invalid:
+        return rows + [("FAIL", "cases", "%d case(s) rest on unregistered, planned or unsourced evidence: %s" % (len(invalid), invalid[0][1]["why"][:200]))]
+    adjudicated = [c for c, r in results if r["verdict"] == "settled by adjudication"]
+    _, basis = dm.threshold(project, config)
+    if adjudicated and basis.startswith("uncalibrated"):
+        return rows + [("WARN", "cases", "%d case(s) settled by adjudication against an uncalibrated threshold. Run detective_backtest.py on decided cases with --write-calibration." % len(adjudicated))]
+    counts = {}
+    for _, r in results:
+        counts[r["verdict"]] = counts.get(r["verdict"], 0) + 1
+    return rows + [("PASS", "cases", ", ".join("%d %s" % (n, v) for v, n in sorted(counts.items())))]
+
+
 def check_git_branch(project, config):
     if git(project, "rev-parse", "--is-inside-work-tree").returncode != 0:
         return False, [("FAIL", "git branch", "the project is not a git repository. Run git init and commit, so that the run can be reviewed and undone.")]
@@ -701,6 +731,7 @@ def main():
     rows += ledger_rows
     rows += check_decisions(project)
     rows += check_questions(project, config)
+    rows += check_detective(project, config)
     rows += branch_rows
     if is_repo:
         rows += check_git_clean(dirty_before, dirty_after, args.allow_dirty)

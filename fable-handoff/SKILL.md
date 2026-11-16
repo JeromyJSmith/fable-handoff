@@ -49,8 +49,8 @@ directory this file is in). Run each with `uv run --script` and `--project`; eac
 `--help`. In order of use: `preflight.py` and `conversation_context.py`
 (phase 1), `init_handoff.py` (4), `audit_rules.py` (5), `spec_tool.py` and
 `render_handoff.py` (6), `readiness_check.py` and `system_review.py` (7), and
-`post_run_report.py` (9). Init copies `fable/launch.py` and
-`fable/questions.py` (judgment test, parking, question systems) into the project.
+`post_run_report.py` (9). Init copies `fable/launch.py`, `fable/questions.py`
+and `fable/detective.py` (cases and verdicts) into the project.
 
 Read each reference at the point this file names it:
 `references/preflight.md` and `references/conversation-context.md` (phase 1),
@@ -240,8 +240,8 @@ Keep the defaults for model (the pinned ID `claude-fable-5-2`, because the
 mode (`auto` on the owner's machine). Add `--ownership` only if the owner said
 the codebase is the model's to reshape. Point at the project's own systems
 with `--question-system bcf:<file>|markdown:<file>|github:<repo>` and
-`--decisions-log <file>`; set `evidence_ladder` in handoff.json to where each
-rung lives. `--from-preflight` reuses preflight's
+`--decisions-log <file>`; set `evidence_ladder` and `detective_functions` in
+handoff.json (`references/detective-standard.md`). `--from-preflight` reuses preflight's
 verify command, protected paths and open criteria. Init never overwrites a
 file without `--force` (which resets a filled-in mission too).  It prints the
 `.claude/settings.json` diff and writes it only on the owner's yes (prompt or

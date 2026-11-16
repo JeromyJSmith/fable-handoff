@@ -8,7 +8,7 @@ The steps in short:
 | --- | --- | --- |
 | 1 | Decide it is a Fable job (long, open-ended, too big for Opus) | |
 | 1b | Preflight; sorts open questions into evidence and judgment | `preflight.py --project . --run-tests` |
-| 1d | Detective work: settle evidence questions; find gaps | `decision_interview.py --project . --settle`, `gap_analysis.py --project .` |
+| 1d | Detective work: cases and verdicts, settle evidence questions, find gaps; back-test on decided cases | `fable/detective.py verdicts`, `fable/questions.py route`, `detective_backtest.py`; `decision_interview.py --project . --settle`, `gap_analysis.py --project .` |
 | 1c | Rebuild context from past sessions | `conversation_context.py --project . --project-logs` |
 | 2 | Discover the project and every instructions file | |
 | 3 | Interview the owner on judgment calls only, one at a time | `decision_interview.py --project .` |

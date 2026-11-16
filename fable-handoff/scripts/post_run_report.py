@@ -327,6 +327,25 @@ def detective_sections(project, config):
     elif questions is not None:
         out.append("No questions wait on the owner.")
     out.append("")
+    cases = load_json(project / "fable" / "cases.json", [])
+    out += ["## Cases and verdicts", ""]
+    if cases:
+        counts = {}
+        for c in cases:
+            v = (c.get("result") or {}).get("verdict", "not computed")
+            counts[v] = counts.get(v, 0) + 1
+        out.append("%d case(s): %s. Each is in fable/CASES.md in plain words." % (len(cases), ", ".join("%d %s" % (n, v) for v, n in sorted(counts.items()))))
+        for c in cases:
+            r = c.get("result") or {}
+            if r.get("verdict") in ("open, fact", "settled by adjudication"):
+                out.append("- %s: %s%s. %s" % (c.get("subject") or c.get("question"), r["verdict"], (" (" + str(r["answer"]) + ")") if r.get("answer") else "", r.get("why", "")))
+    else:
+        out.append("No cases recorded (fable/cases.json).")
+    backtest = load_json(project / "fable" / "backtest.json", None)
+    if isinstance(backtest, dict):
+        o = backtest.get("outcome", {})
+        out.append("Back-test on %s decided case(s): %s right, %s wrong, %s open." % (backtest.get("cases"), o.get("right"), o.get("wrong"), o.get("open")))
+    out.append("")
     gaps = load_json(project / "fable" / "gaps.json", {}).get("gaps", [])
     out += ["## Gaps found and bridged", ""]
     if gaps:

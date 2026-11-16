@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.0 (2026-11-16)
+
+The detective standard: detective work defined, not a slogan.
+
+- `fable/detective.py`: every investigation is a case (subject, question, candidates, evidence, verdict, record) in `fable/cases.json` and `fable/CASES.md`.
+- `detective_functions` in `fable/handoff.json`: each function described before use (what it looks at, what it returns, strength, built or planned, test). Evidence from an unregistered or planned function, or without an underlying source, is refused.
+- Computed verdicts: settled (a decisive source, or two independent strong sources), likely, settled by adjudication (kept apart), open fact, open policy. Conflicting decisive sources go to the owner. Leads never count. Two functions reading the same source count once. Quantities count as strong only within `quantity_tolerance` after unit conversion.
+- `questions.py route`: settled cases become decisions by evidence or by adjudication; policy cases go to the question system with the case attached; facts return to the queue.
+- `detective_backtest.py`: run blind on cases the owner decided (each case's own ruling hidden), score each function and the verdicts, and calibrate the adjudication threshold into `fable/calibration.json`.
+- Owner-facing questions that lean on bare codes are refused.
+- Readiness checks the registry and the cases; the review reports cases, verdicts and the back-test.
+
 ## 1.2.0 (2026-11-16)
 
 Detective work before judgment calls; park and continue.

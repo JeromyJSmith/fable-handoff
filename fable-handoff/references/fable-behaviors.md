@@ -347,3 +347,12 @@ problems that stop all work. The next run imports the answers and resumes.
 
 When concepts that should connect do not, run the gap analysis in
 `references/gap-analysis.md`. Its bridges are leads to check, never answers.
+
+**The detective standard** (`references/detective-standard.md`) makes this
+exact. Each investigation is a case; evidence comes only from registered
+detective functions, each with a strength (lead, supporting, strong,
+decisive); and the verdict is computed: settled by a decisive source or two
+independent strong ones, likely on one strong source, open as a fact when the
+evidence is missing or disagrees, open as policy only for the owner's choice
+or conflicting rules. Adjudication settles a likely case only above a
+threshold calibrated on cases the owner already decided.
