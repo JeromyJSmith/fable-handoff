@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
 """Scaffold a fable-handoff package in a project.
 
 Creates eleven files (the config, four Markdown files, the launcher, three
@@ -10,14 +14,17 @@ With --refresh-hooks it only replaces the code that came from the skill (the
 three hooks and fable/launch.py) in a project that already has a package.
 
 Examples:
-    python3 init_handoff.py --project ~/code/shop \\
+    uv run --script init_handoff.py --project ~/code/shop \\
         --verify-command "npm test" --branch fable/checkout --max-budget-usd 60
-    python3 init_handoff.py --project ~/code/shop --refresh-hooks
+    uv run --script init_handoff.py --project ~/code/shop --refresh-hooks
 """
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime
+import difflib
+import hashlib
 import json
 import shutil
 import sys
@@ -95,6 +102,12 @@ CODE_FILES = {
 }
 
 
+AGENT_FILES = {
+    ".claude/agents/%s" % name: ASSETS / "agents" / name
+    for name in ("fable-scout.md", "fable-builder.md", "fable-worker.md", "fable-specialist.md")
+}
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Scaffold a fable-handoff package (config, mission templates, hooks, launcher, subagents) in a project.",
@@ -111,6 +124,8 @@ def parse_args():
     parser.add_argument("--ownership", action="store_true", help="tell the model the codebase is its own, so that it refactors as it goes. Leave off for client or shared code.")
     parser.add_argument("--force", action="store_true", help="overwrite existing package files, including a mission and ledger you have filled in. Commit first.")
     parser.add_argument("--from-preflight", action="store_true", help="use fable/preflight.json from preflight.py: its verify command when --verify-command is not given, its paths to protect, and its open acceptance criteria as the first tasks in fable/STATE.md. Check each before launch.")
+    parser.add_argument("--apply-settings", action="store_true", help="write the .claude/settings.json change shown in the diff without asking. Without it, an interactive terminal is asked, and anything else gets the diff and fable/settings.proposed.json, with settings left untouched.")
+    parser.add_argument("--uninstall", action="store_true", help="remove the hooks this skill registered and installed, restoring the settings backup when settings were not changed since. Leaves fable/ (mission, ledger, decisions) alone.")
     parser.add_argument("--refresh-hooks", action="store_true", help="in a project that already has a package, replace the three hooks and fable/launch.py with the skill's current copies and touch nothing else. The other options are ignored.")
     return parser.parse_args()
 
@@ -150,7 +165,7 @@ def merge_settings(settings, stop_timeout):
         groups = hooks.setdefault(event, [])
         if name in json.dumps(groups):
             continue  # already registered
-        hook = {"type": "command", "command": 'python3 "${CLAUDE_PROJECT_DIR}/.claude/hooks/%s"' % name}
+        hook = {"type": "command", "command": 'uv run --quiet --script "${CLAUDE_PROJECT_DIR}/.claude/hooks/%s"' % name}
         if event == "Stop":
             # The stop gate runs the verify command, so it needs that long plus a margin.
             hook["timeout"] = stop_timeout
@@ -165,6 +180,100 @@ def merge_settings(settings, stop_timeout):
             deny.append(rule)
             added.append("permissions.deny: " + rule)
     return added
+
+
+INSTALL_RECORD = "fable/settings_install.json"
+
+
+def digest(text):
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def settings_diff(before_text, after_text):
+    return "".join(difflib.unified_diff(
+        before_text.splitlines(keepends=True), after_text.splitlines(keepends=True),
+        "a/.claude/settings.json", "b/.claude/settings.json"))
+
+
+def confirm(diff):
+    """Ask on an interactive terminal. Anything else counts as no."""
+    if not sys.stdin.isatty():
+        return False
+    sys.stderr.write(diff + "\nWrite this change to .claude/settings.json? A backup is kept, and --uninstall undoes it. [y/N] ")
+    sys.stderr.flush()
+    try:
+        return input().strip().lower() in ("y", "yes")
+    except EOFError:
+        return False
+
+
+def uninstall(project):
+    """Remove what init registered and installed. Returns a summary."""
+    settings_path = project / ".claude" / "settings.json"
+    record_path = project / INSTALL_RECORD
+    record = {}
+    if record_path.exists():
+        try:
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+        except ValueError:
+            record = {}
+    summary = {"project": str(project), "settings": "unchanged", "removed": [], "kept": []}
+    current = settings_path.read_text(encoding="utf-8") if settings_path.exists() else None
+    if current is not None:
+        if record.get("written_sha256") == digest(current):
+            # Nothing changed since init wrote the file: put back exactly what was there.
+            backup = record.get("backup")
+            if backup and (project / backup).exists():
+                shutil.copyfile(project / backup, settings_path)
+                summary["settings"] = "restored from " + backup
+            elif not record.get("existed_before", True):
+                settings_path.unlink()
+                summary["settings"] = "removed (it did not exist before init)"
+        else:
+            # Edited since: take out only this skill's entries, keep everything else.
+            settings = load_settings(settings_path)
+            names = [name for name, _, _ in HOOKS]
+            hooks = settings.get("hooks", {})
+            for event in list(hooks):
+                hooks[event] = [g for g in hooks[event] if not any(n in json.dumps(g) for n in names)]
+                if not hooks[event]:
+                    del hooks[event]
+            if not hooks:
+                settings.pop("hooks", None)
+            added_deny = record.get("deny_added", DENY_RULES)
+            deny = settings.get("permissions", {}).get("deny")
+            if isinstance(deny, list):
+                settings["permissions"]["deny"] = [r for r in deny if r not in added_deny]
+                if not settings["permissions"]["deny"]:
+                    del settings["permissions"]["deny"]
+                if not settings["permissions"]:
+                    del settings["permissions"]
+            new_text = json.dumps(settings, indent=2) + "\n"
+            if new_text != current:
+                stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+                shutil.copyfile(settings_path, settings_path.with_name("settings.json.bak-uninstall-" + stamp))
+                settings_path.write_text(new_text, encoding="utf-8")
+                summary["settings"] = "removed this skill's hooks and deny rules; other settings kept"
+    for name, _, _ in HOOKS:
+        target = project / ".claude" / "hooks" / name
+        if target.exists():
+            target.unlink()
+            summary["removed"].append(".claude/hooks/" + name)
+    for rel, source in AGENT_FILES.items():
+        target = project / rel
+        if target.exists():
+            if target.read_bytes() == source.read_bytes():
+                target.unlink()
+                summary["removed"].append(rel)
+            else:
+                summary["kept"].append(rel + " (edited since install)")
+    for folder in (project / ".claude" / "hooks", project / ".claude" / "agents"):
+        if folder.is_dir() and not any(folder.iterdir()):
+            folder.rmdir()
+    if record_path.exists():
+        record_path.unlink()
+    (project / "fable" / "settings.proposed.json").unlink(missing_ok=True)
+    return summary
 
 
 def load_preflight(project):
@@ -238,6 +347,10 @@ def main():
     if not project.is_dir():
         fail("%s is not a directory. Pass the project root with --project." % project)
 
+    if args.uninstall:
+        print(json.dumps(uninstall(project), indent=2))
+        return 0
+
     if args.refresh_hooks:
         # Only code is replaced. The mission, the operating rules, the ledger,
         # the decisions, the config, the agents and the settings stay as they are.
@@ -276,10 +389,7 @@ def main():
         "fable/STATE.md": state_text,
         "fable/DECISIONS.md": ASSETS / "templates" / "DECISIONS.md",
         **CODE_FILES,
-        ".claude/agents/fable-scout.md": ASSETS / "agents" / "fable-scout.md",
-        ".claude/agents/fable-builder.md": ASSETS / "agents" / "fable-builder.md",
-        ".claude/agents/fable-worker.md": ASSETS / "agents" / "fable-worker.md",
-        ".claude/agents/fable-specialist.md": ASSETS / "agents" / "fable-specialist.md",
+        **AGENT_FILES,
     }
     created, skipped = [], []
     for rel, source in package.items():
@@ -295,15 +405,33 @@ def main():
         created.append(rel)
 
     backups = []
-    settings_added = merge_settings(settings, verify_timeout + 120)
+    existed = settings_path.exists()
+    before_text = settings_path.read_text(encoding="utf-8") if existed else ""
+    proposed = copy.deepcopy(settings)
+    settings_added = merge_settings(proposed, verify_timeout + 120)
+    after_text = json.dumps(proposed, indent=2) + "\n"
+    diff = settings_diff(before_text, after_text) if settings_added else ""
+    written = False
     if settings_added:
-        if settings_path.exists():
-            stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-            backup = settings_path.with_name("settings.json.bak-" + stamp)
-            shutil.copyfile(settings_path, backup)
-            backups.append(str(backup.relative_to(project)))
-        settings_path.parent.mkdir(parents=True, exist_ok=True)
-        settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+        if args.apply_settings or confirm(diff):
+            if existed:
+                stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+                backup = settings_path.with_name("settings.json.bak-" + stamp)
+                shutil.copyfile(settings_path, backup)
+                backups.append(str(backup.relative_to(project)))
+            settings_path.parent.mkdir(parents=True, exist_ok=True)
+            settings_path.write_text(after_text, encoding="utf-8")
+            written = True
+            record = {"existed_before": existed, "backup": backups[0] if backups else None,
+                      "written_sha256": digest(after_text), "added": settings_added,
+                      "deny_added": [a.split(": ", 1)[1] for a in settings_added if a.startswith("permissions.deny")],
+                      "written": datetime.datetime.now().isoformat(timespec="seconds")}
+            (project / INSTALL_RECORD).write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+            (project / "fable" / "settings.proposed.json").unlink(missing_ok=True)
+        else:
+            (project / "fable" / "settings.proposed.json").write_text(after_text, encoding="utf-8")
+            sys.stderr.write(diff + "\n.claude/settings.json was NOT changed. The change above is saved as fable/settings.proposed.json. "
+                             "Run again with --apply-settings once the owner agrees. The readiness check fails until the hooks are registered.\n")
 
     gitignore = project / ".gitignore"
     existing = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
@@ -316,6 +444,8 @@ def main():
         "created": created,
         "skipped_existing": skipped,
         "settings_added": settings_added,
+        "settings_written": written,
+        "settings_diff": diff,
         "backups": backups,
     }, indent=2))
     return 0

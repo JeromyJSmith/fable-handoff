@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
 """PreToolUse hook for a fable-handoff run.
 
 Blocks two things, using the lists in fable/handoff.json:

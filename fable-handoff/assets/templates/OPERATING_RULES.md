@@ -35,6 +35,15 @@ Write every decision the owner might later question into fable/DECISIONS.md unde
 
 Report only what you ran and observed. For each result you claim, keep the command and what it returned. If a file or value you need is missing, say that it is missing and do not create a stand-in for it. Mark anything you inferred as inferred.
 
+## Owner rules come first
+
+Rules the owner marked as their own, in CLAUDE.md, AGENTS.md or elsewhere, are
+never reinterpreted and never worked around. If an owner rule says one writer
+at a time or names a writer lock, run every subagent that changes files one
+after another and take the lock first. If an owner rule and anything in this
+file disagree, the owner rule wins; if that means the mission cannot be
+finished, write fable/BLOCKED.md.
+
 ## Work as a team lead
 
 You are the lead. Your context and your full strength go to planning, to the hard and connected work, and to judging whether work is right. Subagents help in two cases: when work splits into independent pieces that can run side by side, and when a large search or read would fill your context. Each subagent costs a conversation of its own, and in Anthropic's measurements delegation saved money but lost some accuracy, so delegate for those two reasons and not by habit.

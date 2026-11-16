@@ -1,16 +1,16 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 # /// script
-# requires-python = ">=3.9"
+# requires-python = ">=3.11"
 # dependencies = []
 # ///
 """Validate and inspect fable/handoff_spec.json, the structured handoff spec.
 
-    python3 scripts/spec_tool.py check   --project .          # schema + readiness problems
-    python3 scripts/spec_tool.py check   --project . --json   # same, as JSON
-    python3 scripts/spec_tool.py schema                       # print the JSON Schema path
-    python3 scripts/spec_tool.py new     --project .          # write an empty spec to fill in
-    python3 scripts/spec_tool.py brief   --project .          # one page for the owner to approve
-    python3 scripts/spec_tool.py signoff --project . --by "Jane Owner"   # after the owner says yes
+    uv run --script scripts/spec_tool.py check   --project .          # schema + readiness problems
+    uv run --script scripts/spec_tool.py check   --project . --json   # same, as JSON
+    uv run --script scripts/spec_tool.py schema                       # print the JSON Schema path
+    uv run --script scripts/spec_tool.py new     --project .          # write an empty spec to fill in
+    uv run --script scripts/spec_tool.py brief   --project .          # one page for the owner to approve
+    uv run --script scripts/spec_tool.py signoff --project . --by "Jane Owner"   # after the owner says yes
 
 The spec is the single source for the mission, ledger, decisions and run
 settings. preflight.py drafts it, you and the owner complete it, this script

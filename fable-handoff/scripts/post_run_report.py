@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
 """Review a project after an unattended run.
 
 Prints a Markdown review that starts with a verdict: CLEAN, or NEEDS REVIEW
@@ -11,9 +15,12 @@ A clean verdict means none of these signs were found. It does not replace
 reading fable/REPORT.md and the diff.
 
 Example:
-    python3 post_run_report.py --project ~/code/shop --out /tmp/review.md
+    uv run --script post_run_report.py --project ~/code/shop --out /tmp/review.md
 """
 from __future__ import annotations
+
+# Every script in this skill runs under uv, never a bare interpreter.
+UV_SCRIPT = ["uv", "run", "--quiet", "--script"]
 
 import argparse
 import json
@@ -229,7 +236,7 @@ def run_conversation(fable):
     script = Path(__file__).resolve().parent / "conversation_context.py"
     if not transcripts or not shutil.which("jq") or not script.exists():
         return None
-    proc = subprocess.run([sys.executable, str(script), "--project", str(fable.parent), "--json", "--no-write",
+    proc = subprocess.run([*UV_SCRIPT, str(script), "--project", str(fable.parent), "--json", "--no-write",
                            "--logs", *map(str, transcripts)], capture_output=True, text=True)
     try:
         return json.loads(proc.stdout) if proc.returncode == 0 else None

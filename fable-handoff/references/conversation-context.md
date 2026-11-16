@@ -31,15 +31,15 @@ finds the files and runs jq once over all of them. jq must be installed.
 
 ```bash
 # The logs Claude Code keeps for this project, subagents included
-python3 scripts/conversation_context.py --project . --project-logs
+uv run --script scripts/conversation_context.py --project . --project-logs
 
 # Specific files or directories, mixed freely
-python3 scripts/conversation_context.py --project . \
+uv run --script scripts/conversation_context.py --project . \
   --logs ~/.claude/projects/-Users-me-app/ fable/.run/transcript-0.jsonl
 
 # As part of preflight: CONTEXT.md becomes a history and state source
-python3 scripts/preflight.py --project . --run-tests --project-logs
-python3 scripts/preflight.py --project . --conversations path/to/logs/
+uv run --script scripts/preflight.py --project . --run-tests --project-logs
+uv run --script scripts/preflight.py --project . --conversations path/to/logs/
 ```
 
 `--project-logs` looks in `~/.claude/projects/<project path with every

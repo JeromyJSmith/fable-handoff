@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
 """Stop hook for a fable-handoff run.
 
 When the model tries to end its turn, this hook decides whether the mission
@@ -37,6 +41,21 @@ TASK_LINE = re.compile(r"^\s*[-*+]\s+\[( |x|X)\]\s+(.*)$")
 OUTPUT_TAIL_LINES = 40
 OUTPUT_TAIL_CHARS = 4000
 
+
+# Output that means the command never got to check anything: the interpreter,
+# a module or the program itself is missing. On macOS a bare `python3` is often
+# a different interpreter from the one with the project's packages, so a verify
+# command like `python3 -m pytest` fails this way forever.
+CANNOT_RUN = re.compile(
+    r"No module named|ModuleNotFoundError|command not found|: not found\b|No such file or directory|"
+    r"error: Failed to spawn|ImportError while loading conftest",
+    re.IGNORECASE,
+)
+
+
+def cannot_run(code, output):
+    """True when a failing command failed before it could check anything."""
+    return code in (126, 127) or (code not in (0, None) and bool(CANNOT_RUN.search(output or "")))
 
 def read_payload():
     try:
@@ -199,6 +218,23 @@ def evaluate(project, config):
     if command:
         timeout = config.get("verify_timeout_seconds") or 1800
         code, output = run_verify(command, project, timeout)
+        if cannot_run(code, output):
+            return (
+                "The run is not finished, and the verify command could not even start its checks.\n"
+                "\n"
+                "Command: %s\n"
+                "Exit code: %d\n"
+                "Last lines of its output:\n"
+                "%s\n"
+                "\n"
+                "This is an environment problem, not unfinished work: a program or module the\n"
+                "command needs is missing. Run Python tools through uv (for example `uv run pytest`)\n"
+                "rather than a bare interpreter. Do not change the verify command in\n"
+                "fable/handoff.json. If it cannot run without the owner, write fable/BLOCKED.md and\n"
+                "fable/REPORT.md, and you will be allowed to stop."
+                % (command, code, tail(output)),
+                {"open_tasks": 0, "verify": "cannot run"},
+            )
         if code != 0:
             result = "timed out after %s seconds" % timeout if code is None else "exit code %d" % code
             return (

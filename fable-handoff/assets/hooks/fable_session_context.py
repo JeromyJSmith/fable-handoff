@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
 """SessionStart hook for a fable-handoff run.
 
 Prints a short note that Claude Code adds to the model's context when a

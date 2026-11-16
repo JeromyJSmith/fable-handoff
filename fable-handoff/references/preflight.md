@@ -51,7 +51,7 @@ MISSING.
 ## 3. Running it
 
 ```bash
-python3 scripts/preflight.py --project /path/to/project --run-tests
+uv run --script scripts/preflight.py --project /path/to/project --run-tests
 ```
 
 Options:
@@ -111,7 +111,7 @@ preflight until it says READY FOR PREPARATION.
 ## 6. From preflight to the package
 
 ```bash
-python3 scripts/init_handoff.py --project /path/to/project --from-preflight \
+uv run --script scripts/init_handoff.py --project /path/to/project --from-preflight \
   --branch fable/my-job --max-budget-usd 40
 ```
 

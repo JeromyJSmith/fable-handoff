@@ -46,7 +46,7 @@ cross-check: 2026-11-16, against Claude Code 2.1.325.
 
 1. Open each page above and check the "What the skill relies on" column.
    Note anything that moved.
-2. Run `python3 scripts/readiness_check.py` on a prepared project. Its `cli
+2. Run `uv run --script scripts/readiness_check.py` on a prepared project. Its `cli
    flags` row compares the launcher's flags with the installed CLI.
 3. Fix the scripts, the references or the templates, run the acceptance suite,
    and update the date at the top of this file.
