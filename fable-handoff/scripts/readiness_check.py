@@ -391,9 +391,9 @@ def check_detective(project, config):
     spec = importlib.util.spec_from_file_location("fable_detective", path)
     dm = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(dm)
-    problems = dm.registry_problems(config)
+    problems = dm.registry_problems(config, project)
     if problems:
-        return [("FAIL", "detective functions", "; ".join(problems[:4]) + ". Describe every function before it is used.")]
+        return [("FAIL", "detective functions", "%d problem(s): %s. The registry must be this project's own, derived from analysing it (references/detective-standard.md, section 7)." % (len(problems), "; ".join(problems[:4])))]
     rows = [("PASS", "detective functions", "%d registered: %s" % (len(dm.registry(config)), short_list(dm.registry(config))))]
     cases = dm.load_cases(project)
     if not cases:

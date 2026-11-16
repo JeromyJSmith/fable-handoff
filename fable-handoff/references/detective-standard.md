@@ -109,12 +109,47 @@ wrong, and calibrates the adjudication threshold to the lowest confidence that
 was right at least `--target` of the time. A function that is often wrong is
 weakened in the registry or fixed, never trusted.
 
-## 7. Setting it up for a project
+## 7. Deriving the project's own functions (required)
 
-1. Replace `detective_functions` with the project's real functions; mark the
-   ones not built yet as `planned`.
-2. Set `quantity_tolerance` per dimension (`area`, `length`, `volume`,
-   `count`) or `default_pct`.
-3. Build the decided set and run the back-test before the run relies on
-   adjudication.
-4. Then run the open questions as cases.
+The registry init writes is ten generic examples, each marked `"generic":
+true`. They show the shape, not this project. Before the readiness check will
+pass, analyse the project and replace them:
+
+1. **Inventory the evidence the project holds.** List its kinds of files and
+   data (drawings, models, schedules, spreadsheets, budgets, code, tests,
+   logs, specs, standards, decision logs, tickets), the text inside them
+   (labels, titles, notes, comments, column names), the connectors that reach
+   the owner's words (email, notes, chat, voice memos), and the outside
+   standards the field uses.
+2. **List the questions this project raises.** Read the open questions,
+   preflight's triage and the gap analysis. Name the subjects that need
+   placing, identifying or valuing, and the candidates they choose between.
+3. **Define one function per real way of answering them.** For each: a name
+   in this project's terms ("budget match against the bid sheet", "detail
+   title on the sheet", "column header in the export"), what it looks at,
+   what it returns, and `project_sources`: the concrete paths or globs it
+   reads, or `connector: ...` / `external: ...` for sources outside the
+   repository. Every path must match something in the project.
+4. **Set each strength honestly.** Decisive only for rules and rulings that
+   answer the question outright; strong for direct, specific evidence;
+   supporting for consistency; lead for anything that only points where to
+   look. Say in `strong_when` and `weak_when` what changes it.
+5. **Mark what is not built.** A function the run cannot execute yet is
+   `planned`; its evidence is refused until it is built.
+6. **Give each a test**: the decided cases or known examples that show it
+   works.
+7. **Drop the generic examples** that do not apply, and keep none marked
+   `generic`.
+8. **Set `quantity_tolerance`** per dimension (`area`, `length`, `volume`,
+   `count`) or `default_pct`, from how this project's quantities are rounded.
+9. **Back-test** on decided cases (section 6) and weaken or fix any function
+   that is often wrong, before the run relies on adjudication.
+
+Check the registry at any time:
+
+```bash
+uv run --script fable/detective.py functions
+```
+
+It lists every problem the readiness check will raise: generic examples left,
+functions without project sources, sources that match nothing, missing tests.

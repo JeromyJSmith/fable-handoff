@@ -58,7 +58,11 @@ from pathlib import Path
 STRENGTH = {"lead": 0, "supporting": 1, "strong": 2, "decisive": 3}
 DEFAULT_THRESHOLD = 0.70
 
-# A generic registry. Projects replace or extend it in fable/handoff.json.
+# Generic examples only. Every project must replace them with its own
+# functions, derived from analysing that project (see
+# references/detective-standard.md, section 7). The readiness check refuses a
+# registry that still holds a generic example, or a function whose
+# project_sources name nothing that exists in the project.
 DEFAULT_FUNCTIONS = [
     {"name": "name match", "looks_at": "the normalized name against the project's vocabulary, terms and aliases",
      "returns": "candidates whose name or alias matches", "strength": "strong", "weak_when": "only a single common word matches", "status": "built", "test": "known names map to their class"},
@@ -106,10 +110,36 @@ def registry(config: dict) -> dict[str, dict]:
     return {f["name"]: f for f in functions if isinstance(f, dict) and f.get("name")}
 
 
-def registry_problems(config: dict) -> list[str]:
-    """A function is described before it is used."""
+for _f in DEFAULT_FUNCTIONS:
+    _f["generic"] = True
+
+EXTERNAL = ("connector:", "http://", "https://", "mcp:", "api:", "external:", "owner:")
+
+
+def registry_problems(config: dict, project: Path | None = None) -> list[str]:
+    """A function is described before it is used, and it is this project's own.
+
+    With `project`, each function must name in `project_sources` the concrete
+    places in this project it reads (paths or globs that match at least one
+    file, or a connector or outside source written as "connector: ...",
+    "https://...", "external: ..."), and no generic example may remain.
+    """
     out = []
     for name, f in registry(config).items():
+        if project is not None:
+            if f.get("generic"):
+                out.append("'%s' is still the generic example; analyse this project and replace it with a function of its own, or remove it" % name)
+                continue
+            sources = f.get("project_sources")
+            if not isinstance(sources, list) or not [x for x in sources if str(x).strip()]:
+                out.append("'%s' names no project_sources: the concrete files, data or systems in this project it reads" % name)
+            else:
+                for src in sources:
+                    src = str(src).strip()
+                    if src.lower().startswith(EXTERNAL):
+                        continue
+                    if not any(project.glob(src)) and not (project / src).exists():
+                        out.append("'%s' reads %s, which matches nothing in this project" % (name, src))
         for key in ("looks_at", "returns", "strength", "status", "test"):
             if not str(f.get(key) or "").strip():
                 out.append("detective function '%s' has no %s" % (name, key.replace("_", " ")))
@@ -302,7 +332,7 @@ def main() -> int:
     project = Path(args.project).resolve() if args.project else project_root()
     config = load_config(project)
     if args.command == "functions":
-        problems = registry_problems(config)
+        problems = registry_problems(config, project)
         print(json.dumps({"functions": list(registry(config).values()), "problems": problems}, indent=2))
         return 1 if problems else 0
     if args.command == "show":

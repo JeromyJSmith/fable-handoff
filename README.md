@@ -34,16 +34,16 @@ Install a release tag. `main` can change at any time.
 
 ```bash
 # Recommended: a tagged release, into ~/.claude/skills/fable-handoff
-curl -fsSL https://raw.githubusercontent.com/JeromyJSmith/fable-handoff/v1.3.0/install.sh | bash -s -- --ref v1.3.0
+curl -fsSL https://raw.githubusercontent.com/JeromyJSmith/fable-handoff/v1.3.1/install.sh | bash -s -- --ref v1.3.1
 
 # Into the current repo's .claude/skills instead
-curl -fsSL https://raw.githubusercontent.com/JeromyJSmith/fable-handoff/v1.3.0/install.sh | bash -s -- --ref v1.3.0 --project
+curl -fsSL https://raw.githubusercontent.com/JeromyJSmith/fable-handoff/v1.3.1/install.sh | bash -s -- --ref v1.3.1 --project
 
 # As a Claude Code plugin (2.1.275 or later)
 /plugin install fable-handoff --marketplace JeromyJSmith/fable-handoff
 
 # By hand
-git clone --branch v1.3.0 https://github.com/JeromyJSmith/fable-handoff && cp -R fable-handoff/fable-handoff ~/.claude/skills/
+git clone --branch v1.3.1 https://github.com/JeromyJSmith/fable-handoff && cp -R fable-handoff/fable-handoff ~/.claude/skills/
 ```
 
 The installer checks for git and uv, prints the exact commit it installed,
@@ -119,7 +119,10 @@ it likely, and an adjudicator may settle it only above a threshold calibrated
 on cases you already decided; missing or conflicting evidence leaves an open
 fact with what would settle it; only your own choice, or rules that conflict,
 reach you. `detective_backtest.py` runs the standard blind on decided cases
-and scores every function. See `fable-handoff/references/detective-standard.md`.
+and scores every function. The functions init writes are generic examples: for every project,
+the preparing agent analyses the project and replaces them with its own, each
+naming the files, data or systems it reads, and readiness fails until it has.
+See `fable-handoff/references/detective-standard.md`.
 
 ## Park and continue
 
@@ -178,7 +181,7 @@ set `FABLE_HANDOFF_SKILL_DIR=/path/to/fable-handoff`.
 
 1. Update `CHANGELOG.md` and the version in `pyproject.toml` and `.claude-plugin/*.json`.
 2. Run `uv run pytest`.
-3. Tag and push: `git tag -a v1.3.0 -m "fable-handoff 1.3.0" && git push origin v1.3.0`.
+3. Tag and push: `git tag -a v1.3.1 -m "fable-handoff 1.3.1" && git push origin v1.3.1`.
 4. Point the install commands in this README at the new tag.
 
 ## Keeping it correct

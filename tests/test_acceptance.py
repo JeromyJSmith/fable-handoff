@@ -1314,8 +1314,10 @@ def test_jq_queries(tmp_path):
 
 
 def rendered_project(tmp_path, spec=None):
+    from conftest import SLUG_FUNCTIONS
     project = bare_project(tmp_path)
     init(project)
+    write_cfg(project, detective_functions=SLUG_FUNCTIONS)
     write_spec(project, spec or copy.deepcopy(GOOD_SPEC))
     return project
 
@@ -2646,7 +2648,8 @@ def test_adjudication_settles_only_above_the_threshold_and_is_kept_apart(tmp_pat
 
 
 def test_cases_are_routed_by_verdict(tmp_path):
-    project = prepared_project(tmp_path)
+    # The engine is tested with the generic example functions; readiness is not involved.
+    project = prepared_project(tmp_path, detective_functions=detective_module().DEFAULT_FUNCTIONS)
     policy_q = full_record(topic="Pool wall budget split", task="Add edge case tests")
     cases = [
         dict(CASE, id="settled-one", evidence=[ev("rules and precedent", "decisions.md line 4", "Pool wall")]),
@@ -2677,7 +2680,7 @@ def test_owner_questions_refuse_bare_codes(tmp_path):
 
 
 def test_backtest_is_blind_scores_functions_and_calibrates(tmp_path):
-    project = prepared_project(tmp_path)
+    project = prepared_project(tmp_path, detective_functions=detective_module().DEFAULT_FUNCTIONS)
     decided = []
     for i in range(10):
         right = "Pool wall"
@@ -2709,8 +2712,49 @@ def test_readiness_checks_the_registry_and_cases(tmp_path):
     commit_all(project, "registry")
     _, data = readiness(project)
     assert statuses(data)["detective functions"] == "FAIL"
-    write_cfg(project, detective_functions=detective_module().DEFAULT_FUNCTIONS)
+    from conftest import SLUG_FUNCTIONS
+    write_cfg(project, detective_functions=SLUG_FUNCTIONS)
     (project / "fable/cases.json").write_text(json.dumps([dict(CASE, evidence=[ev("hunch", "gut", "Pool wall")])]))
     commit_all(project, "case")
     _, data = readiness(project)
     assert statuses(data)["cases"] == "FAIL"
+
+
+def test_the_registry_must_be_the_projects_own(tmp_path):
+    from conftest import SLUG_FUNCTIONS
+    project = prepared_project(tmp_path)
+    # init writes generic examples; readiness refuses them
+    write_cfg(project, detective_functions=detective_module().DEFAULT_FUNCTIONS)
+    commit_all(project, "generic registry")
+    _, data = readiness(project)
+    row = next(r for r in data["rows"] if r["check"] == "detective functions")
+    assert row["status"] == "FAIL" and "generic example" in row["detail"] and "section 7" in row["detail"]
+    # a project function must name sources that exist in the project
+    missing = [dict(SLUG_FUNCTIONS[0], project_sources=["drawings/*.dwg"])] + SLUG_FUNCTIONS[1:]
+    write_cfg(project, detective_functions=missing)
+    commit_all(project, "missing source")
+    _, data = readiness(project)
+    row = next(r for r in data["rows"] if r["check"] == "detective functions")
+    assert row["status"] == "FAIL" and "drawings/*.dwg, which matches nothing" in row["detail"]
+    no_sources = [{k: v for k, v in SLUG_FUNCTIONS[0].items() if k != "project_sources"}] + SLUG_FUNCTIONS[1:]
+    write_cfg(project, detective_functions=no_sources)
+    commit_all(project, "no sources")
+    _, data = readiness(project)
+    assert "names no project_sources" in next(r for r in data["rows"] if r["check"] == "detective functions")["detail"]
+    # the project's own registry passes
+    write_cfg(project, detective_functions=SLUG_FUNCTIONS)
+    commit_all(project, "own registry")
+    _, data = readiness(project)
+    assert statuses(data)["detective functions"] == "PASS"
+    proc = run([*UV_SCRIPT, str(project / "fable/detective.py"), "functions", "--project", str(project)])
+    assert proc.returncode == 0 and json.loads(proc.stdout)["problems"] == []
+
+
+def test_init_marks_the_registry_as_generic_examples(tmp_path):
+    project = bare_project(tmp_path)
+    init(project)
+    functions = read_cfg(project)["detective_functions"]
+    assert functions and all(f.get("generic") for f in functions)
+    proc = run([*UV_SCRIPT, str(project / "fable/detective.py"), "functions", "--project", str(project)])
+    assert proc.returncode == 1 and any("generic example" in p for p in json.loads(proc.stdout)["problems"])
+    assert "Replace the detective functions" in (SKILL / "SKILL.md").read_text()

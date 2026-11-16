@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1 (2026-11-16)
+
+- The detective functions must be the project's own. Init writes the generic registry marked as examples; the preparing agent analyses the project and replaces it (`references/detective-standard.md`, section 7, and the new step in SKILL.md phase 4). Each function names its `project_sources`, and every path must match something in the project. `fable/detective.py functions` and the readiness check refuse generic examples, missing sources and sources that match nothing.
+
 ## 1.3.0 (2026-11-16)
 
 The detective standard: detective work defined, not a slogan.

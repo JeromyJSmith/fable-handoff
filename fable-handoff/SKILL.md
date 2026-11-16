@@ -27,20 +27,18 @@ three facts, to prove that it does, and to start the run.
 
 ## Words used in this skill
 
-- **Package**: the files this skill installs (table below). **Mission**:
+- **Package**: the files this skill installs. **Mission**:
   `fable/MISSION.md`, the run's prompt. **Ledger**: `fable/STATE.md`, the task
-  list the model keeps and resumes from.
+  list the model resumes from.
 - **Hooks**: the **guard** blocks forbidden writes and commands; the **stop
   gate** sends the model back to work until the mission is finished; the
   **session note** re-points it at the mission and ledger after a restart or
   compaction.
-- **Permission mode**: the Claude Code setting for which tool calls run
-  without approval.
 - **Subagents**: Fable leads a small team: `fable-scout` (Haiku) for search
   and reading, `fable-worker` (Sonnet) for many independent exact changes,
   `fable-builder` (Opus) for specified independent pieces, `fable-specialist`
-  (Fable) for a large isolated problem. Connected work stays with the lead,
-  which verifies every result. Spec tasks can carry a `route`.
+  (Fable) for a large isolated problem. The lead keeps connected work and
+  verifies every result.
 
 ## What is in this skill
 
@@ -240,8 +238,14 @@ Keep the defaults for model (the pinned ID `claude-fable-5-2`, because the
 mode (`auto` on the owner's machine). Add `--ownership` only if the owner said
 the codebase is the model's to reshape. Point at the project's own systems
 with `--question-system bcf:<file>|markdown:<file>|github:<repo>` and
-`--decisions-log <file>`; set `evidence_ladder` and `detective_functions` in
-handoff.json (`references/detective-standard.md`). `--from-preflight` reuses preflight's
+`--decisions-log <file>`, and set `evidence_ladder` in handoff.json.
+
+**Replace the detective functions.** The `detective_functions` init writes are
+generic examples. Analyse this project and replace them with its own: one per
+real way its questions get answered, named in its terms, each listing the
+`project_sources` it reads, an honest strength, built or planned, and a test.
+Readiness fails until no generic example is left and every source exists
+(`references/detective-standard.md`, section 7). `--from-preflight` reuses preflight's
 verify command, protected paths and open criteria. Init never overwrites a
 file without `--force` (which resets a filled-in mission too).  It prints the
 `.claude/settings.json` diff and writes it only on the owner's yes (prompt or
@@ -353,8 +357,8 @@ conversation only when its context is unchanged, and logs MCP servers that
 failed to connect. Never add `--bare`: it skips the hooks. Details are in
 section 5 of `references/claude-code-setup.md`.
 
-Hand back: what was launched, on which branch and budget; how to watch it
-(`git log`, `fable/STATE.md`, `fable/.run/`); the exit codes (0 finished,
+Hand back: what was launched, branch and budget, how to watch it
+(`fable/STATE.md`, `fable/.run/`), the exit codes (0 finished,
 1 unfinished, 2 refused, 3 blocker, 4 parked: the rest waits on answers in the
 question system); that phase 9 follows; and,
 on a laptop, to prevent sleep.

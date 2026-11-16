@@ -96,6 +96,20 @@ SOLUTION = (
 )
 
 
+# The sample project's own detective functions, derived from what it holds:
+# the code, its tests, its decisions, and one outside standard.
+SLUG_FUNCTIONS = [
+    {"name": "name match", "looks_at": "function and module names in the code", "returns": "candidates a name points to",
+     "strength": "strong", "status": "built", "test": "slugify resolves to src/slug.py", "project_sources": ["src/*.py"]},
+    {"name": "test expectations", "looks_at": "what the tests assert", "returns": "the behaviour a test requires",
+     "strength": "strong", "status": "built", "test": "test_basic expects hello-world", "project_sources": ["app_tests/*.py"]},
+    {"name": "rules and precedent", "looks_at": "decisions recorded before the run", "returns": "the answer a decision gives",
+     "strength": "decisive", "status": "built", "test": "the unicodedata decision", "project_sources": ["fable/DECISIONS.md"]},
+    {"name": "outside standards", "looks_at": "URL syntax rules", "returns": "which characters are allowed",
+     "strength": "strong", "status": "built", "test": "digits and hyphens allowed", "project_sources": ["external: RFC 3986"]},
+]
+
+
 def run(cmd, cwd=None, env=None, stdin=None, timeout=180):
     full_env = dict(os.environ)
     full_env.pop("CLAUDE_PROJECT_DIR", None)
@@ -157,6 +171,7 @@ def prepared_project(tmp_path: Path, name: str = "proj", **cfg_changes) -> Path:
     (project / "fable" / "MISSION.md").write_text(MISSION)
     (project / "fable" / "STATE.md").write_text(STATE)
     (project / "fable" / "DECISIONS.md").write_text(DECISIONS)
+    write_cfg(project, detective_functions=SLUG_FUNCTIONS)
     if cfg_changes:
         write_cfg(project, **cfg_changes)
     for backup in (project / ".claude").glob("settings.json.bak-*"):
