@@ -1,0 +1,578 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fable-handoff/handoff_spec.schema.json",
+  "title": "HandoffSpec",
+  "description": "Everything a Fable 5.2 takeover needs, in one structured file. preflight.py drafts it, the preparing agent and the owner complete it, spec_tool.py validates it, jq queries it, and render_handoff.py writes fable/MISSION.md, fable/STATE.md, fable/DECISIONS.md and the run settings in fable/handoff.json from it. Every list item can carry a source: the document and line it came from.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "project",
+    "goal",
+    "current_state",
+    "commands",
+    "acceptance_criteria",
+    "tasks",
+    "guardrails",
+    "decisions",
+    "open_questions",
+    "traps",
+    "practices_to_keep",
+    "run"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "enum": [
+        1
+      ]
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Short name of the job, used as the mission title."
+        },
+        "repository": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "goal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job",
+        "why"
+      ],
+      "properties": {
+        "job": {
+          "type": "string",
+          "description": "The whole outcome, in one to three paragraphs of prose, at least 40 words. Written once by the agent from the goal document; not assembled from fragments."
+        },
+        "why": {
+          "type": "string",
+          "description": "Who it is for and what wins when goals conflict, at least 20 words of prose."
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "current_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "What exists today, in a few sentences."
+        },
+        "works": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "half_done": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "broken": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "baseline": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "command": {
+              "type": "string"
+            },
+            "exit_code": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "counts": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "where_things_are": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "purpose"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "commands": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verify"
+      ],
+      "properties": {
+        "verify": {
+          "type": "string",
+          "description": "One shell command that exits 0 only when the job is done. Fails before the run."
+        },
+        "fast_check": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "A quicker check for the inner loop."
+        },
+        "build": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "run": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "acceptance_criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "text",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]+$"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "done"
+            ]
+          },
+          "verified_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The test, eval or check that proves this criterion. Required for open criteria."
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A checkable result, not a step."
+          },
+          "check": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How to check it, e.g. a pytest -k expression."
+          },
+          "criteria": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ids of the acceptance criteria this task delivers."
+          },
+          "route": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "fable-scout",
+              "fable-worker",
+              "fable-builder",
+              "fable-specialist",
+              "lead",
+              null
+            ],
+            "description": "Who should do the task: fable-worker for small exact changes, fable-builder for specified larger pieces, fable-specialist for hard self-contained problems, lead for planning and integration. A suggestion the lead may change."
+          }
+        }
+      }
+    },
+    "guardrails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pre_approved",
+        "forbidden",
+        "out_of_scope"
+      ],
+      "properties": {
+        "pre_approved": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "forbidden": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "reason",
+              "enforced_by"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Written as an instruction, e.g. 'Do not edit migrations/'."
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              },
+              "enforced_by": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "protected_paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "blocked_bash_patterns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "out_of_scope": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "text",
+              "reason"
+            ],
+            "properties": {
+              "text": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "decision",
+          "reason"
+        ],
+        "properties": {
+          "decision": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "defaults": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "open_questions": {
+      "type": "array",
+      "description": "Must be empty before rendering. Move each answer into decisions.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "question"
+        ],
+        "properties": {
+          "question": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "traps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "description": "What went wrong before."
+          },
+          "instead": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What to do instead."
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "practices_to_keep": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "done_extra": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Conditions for done that a program cannot check."
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "branch"
+      ],
+      "properties": {
+        "branch": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "effort": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        "permission_mode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "acceptEdits",
+            "dontAsk",
+            "bypassPermissions"
+          ]
+        },
+        "max_budget_usd": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "max_relaunches": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "role"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "goal",
+              "spec",
+              "standards",
+              "state",
+              "history",
+              "evals",
+              "other"
+            ]
+          }
+        }
+      }
+    },
+    "owner_signoff": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "by",
+        "at",
+        "spec_sha256"
+      ],
+      "description": "Written by spec_tool.py signoff after the owner has read the brief and approved it. The hash covers the whole spec except this field, so any later edit voids the sign-off.",
+      "properties": {
+        "by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "spec_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

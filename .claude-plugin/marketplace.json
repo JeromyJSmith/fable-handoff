@@ -1,0 +1,16 @@
+{
+  "name": "fable-handoff",
+  "description": "The fable-handoff skill for Claude Code: unattended Claude Fable 5.2 runs.",
+  "owner": {
+    "name": "Jeromy Smith",
+    "url": "https://github.com/JeromyJSmith"
+  },
+  "plugins": [
+    {
+      "name": "fable-handoff",
+      "source": "./",
+      "description": "Prepare a project for a long unattended Claude Fable 5.2 run, then launch, watch and review it.",
+      "version": "1.0.0"
+    }
+  ]
+}

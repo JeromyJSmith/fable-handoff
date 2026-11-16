@@ -1,0 +1,9 @@
+schema_version: "1.1"
+name: prepares-near-done-project
+expected_outcome: |
+  The agent runs preflight, builds or fills the handoff package with init, writes a mission
+  whose Job and Why come from docs/GOAL.md, protects the spec and tests, sets a $30 cap on a
+  run branch, runs the readiness check, and stops before launching, telling the owner what
+  is left.
+context:
+  scaffold_script: place-files.sh

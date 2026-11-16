@@ -1,0 +1,9 @@
+schema_version: "1.1"
+name: declines-small-job
+expected_outcome: |
+  The agent recognizes a short, fully specified job that does not need an unattended Fable
+  run, says so plainly with the reason (cost and that an interactive session on a cheaper
+  model does it as well), and either does the rename directly or offers to, without building
+  a handoff package.
+context:
+  scaffold_script: place-files.sh

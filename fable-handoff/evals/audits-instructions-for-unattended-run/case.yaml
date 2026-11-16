@@ -1,0 +1,9 @@
+schema_version: "1.1"
+name: audits-instructions-for-unattended-run
+expected_outcome: |
+  The agent runs the audit, rewrites the lines that would stall an unattended run (waiting
+  for approval, think step by step, answer directly) by scoping them to interactive sessions
+  or removing them, keeps the owner's daytime rules working, and reports each change with
+  its reason.
+context:
+  scaffold_script: place-files.sh
