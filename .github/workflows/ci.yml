@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: uv run pytest (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.11", "3.14"]
+    env:
+      UV_PYTHON: ${{ matrix.python }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: jq
+        run: jq --version || (sudo apt-get update && sudo apt-get install -y jq)
+      - name: Tests
+        run: uv run pytest
+      - name: Installer
+        run: |
+          git tag ci-install
+          HOME="$(mktemp -d)" FABLE_HANDOFF_REPO="file://$PWD" bash install.sh --ref ci-install

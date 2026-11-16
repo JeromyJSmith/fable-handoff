@@ -343,6 +343,9 @@ nohup uv run --script fable/launch.py > fable/.run/launch.out 2>&1 &
 | `max_budget_usd` | null | Spend cap across all launches. Null means no cap, and readiness warns |
 | `max_turns` | null | Optional cap on turns per launch |
 | `audit_accept` | [] | `"<file>:<rule id>"` entries that the rules audit treats as accepted |
+| `evidence_ladder` | six rungs | Where the run searches before any question may go to the owner: `[{"rung", "look_in"}]`. Name the real places for each rung in this project. Every question record must cover every rung |
+| `question_system` | `{"type": "json", "path": "fable/open_decisions.json"}` | Where judgment calls are parked: `bcf` (a BCF 3.0 file), `markdown` (a table in the decisions file), `github` (`repo`, `label`, through gh) or `json`. Set with `--question-system` |
+| `decisions_log` | null | The project's own decisions log; decisions go there instead of `fable/DECISIONS.md`. Set with `--decisions-log` |
 | `extra_cli_args` | [] | Extra flags appended to the CLI command. Never `--bare`, which skips the hooks |
 | `mcp_config` | none | Path, inside the project, to an MCP config JSON passed as `--mcp-config`, for example one that adds InfraNodus. The readiness check validates it, and the launcher logs any server that does not connect |
 | `claude_binary` | not set | Optional path to the CLI when it is not on the PATH as `claude` |

@@ -103,7 +103,7 @@ no "instead", no history, no decisions.
 | `problems_text` | One tab-separated line per problem (use `-r`) |
 | `ready` | true or false. With `-e`, exit 0 when ready and 1 when not |
 | `fails` | The FAIL problems only |
-| `open_questions` | Questions with their source, for the interview |
+| `open_questions` | Questions with their source. A question stays only if it passes the judgment test: `kind` "judgment", `nature` policy or preference, `evidence` (rung, searched, found) for every rung of the ladder, `why_not_decided`, `would_settle`, plus the interview fields. `kind` "evidence" with an `answer` is settled by `decision_interview.py --settle` |
 | `unverified` | Open criteria with no test |
 | `criteria_without_task` | Open criteria no task delivers |
 | `unenforced` | Forbidden actions with nothing enforcing them |

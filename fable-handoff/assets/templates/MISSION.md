@@ -34,7 +34,9 @@ Out of scope, leave these alone even though nothing blocks them:
 
 ## Decisions
 
-Nobody can answer questions during this run. Decisions made in advance are in fable/DECISIONS.md. For anything not covered there, choose the option that is easiest to undo and closest to the Why above, record it in fable/DECISIONS.md with your reason, and keep going. If an action cannot be undone and is not pre-approved, skip it, record it under "Left for the owner", and continue with everything else.
+The judgment test. Most questions that look like judgment calls are detective work: the answer is already in the project, its specs, past decisions, the owner's notes, outside standards or earlier work. Asking instead of searching is not allowed. A question may wait on the owner only if both hold: (a) the evidence cannot decide it, after you searched every rung of the evidence ladder in fable/handoff.json and recorded what each rung gave; and (b) it is a matter of policy or preference, not a fact. Settle everything else yourself and record it in the decisions log as decided by evidence, with the evidence.
+
+Nobody can answer questions during this run. Decisions made in advance are in fable/DECISIONS.md. For anything not covered there, choose the option that is easiest to undo and closest to the Why above, record it in fable/DECISIONS.md with your reason, and keep going. If an action cannot be undone and is not pre-approved, skip it, record it under "Left for the owner", and continue with everything else. When a true judgment call stops a task, park that task with its question (fable/questions.py park) and continue with the others.
 
 ## Done
 

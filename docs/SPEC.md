@@ -373,3 +373,13 @@ missing report ("report").
   and its references without asking anything.
 - Messages printed by hooks and scripts say what is wrong and what to do next.
 - Prose is plain: short sentences, reasons given, no capitals for emphasis.
+
+## 1.2: detective work before judgment calls; park and continue
+
+- `fable/handoff.json` carries `evidence_ladder` (six rungs by default), `question_system` and `decisions_log`.
+- `fable/questions.py` (installed by init) implements the judgment test and the adapters (json, markdown, BCF 3.0, GitHub through gh) with `check`, `park`, `settle`, `import` and `status`. A question record without every rung searched, a policy or preference nature, why the evidence does not decide it and what would settle it is refused by `check`, `park`, `decision_interview.py --check`, the readiness check (row "questions") and the stop gate.
+- Preflight reports `drafts.question_triage` (evidence or judgment per question); `decision_candidates` holds judgment calls only.
+- A task line ending "(waiting on owner: <topic>)" counts as finished for this run only when an open question with that topic has a complete record; a failing verify is then allowed once fable/REPORT.md names every parked topic. The launcher exits 4 in that case and refuses to start while answered questions are not imported.
+- `gap_analysis.py` writes `fable/gaps.json` and `fable/GAPS.md`; `--close` needs `--how`.
+- The post-run review has the sections "Settled by evidence", "Parked for the owner" and "Gaps found and bridged".
+

@@ -25,7 +25,8 @@ Output goes to fable/.run/: transcript-<n>.jsonl, stderr-<n>.log and
 launch_log.json.
 
 Exit codes: 0 finished, 1 unfinished, 2 refused to start, 3 stopped on a
-blocker recorded in fable/BLOCKED.md.
+blocker recorded in fable/BLOCKED.md, 4 everything that can move is done and
+the rest waits on the owner's answers in the question system.
 """
 from __future__ import annotations
 
@@ -236,6 +237,33 @@ def mcp_failures(attempt):
     return []
 
 
+def load_questions():
+    path = FABLE / "questions.py"
+    if not path.exists():
+        return None
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("fable_questions", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def answers_waiting():
+    """Topics the owner answered that this project has not imported yet."""
+    questions = load_questions()
+    if questions is None:
+        return []
+    try:
+        return [q.get("topic") for q in questions.system(PROJECT).load() if q.get("status") == "answered"]
+    except Exception:
+        return []
+
+
+def parked_count():
+    state = FABLE / "STATE.md"
+    return len(re.findall(r"^- \[ \] .*\(waiting on owner: ", state.read_text(encoding="utf-8"), re.M)) if state.exists() else 0
+
+
 def mission_finished(config):
     """Ask the stop gate, in dry-run mode, whether it would allow a stop."""
     gate = PROJECT / ".claude" / "hooks" / "fable_stop_gate.py"
@@ -284,6 +312,10 @@ def main():
         refuse("the Claude CLI %r was not found. Install it, or set claude_binary in fable/handoff.json to its full path and rerun the readiness check." % binary)
     if has_content(FABLE / "BLOCKED.md"):
         refuse("fable/BLOCKED.md has content, which tells the run to stop at once. Record the owner's answer in fable/DECISIONS.md, delete fable/BLOCKED.md, then launch again.")
+    waiting = answers_waiting()
+    if waiting:
+        refuse("the owner has answered %d parked question(s) (%s). Bring the answers in first, so the parked tasks resume: "
+               "uv run --script fable/questions.py import, then rerun the readiness check and launch again." % (len(waiting), ", ".join(waiting)))
 
     missing_hooks = [name for name in HOOK_FILES if not (PROJECT / ".claude" / "hooks" / name).is_file()]
     if missing_hooks:
@@ -363,7 +395,7 @@ def main():
             outcome = "blocked"
             break
         if finished:
-            outcome = "finished"
+            outcome = "parked" if parked_count() else "finished"
             break
         # A clean exit leaves a session that can be continued. A crashed one
         # may be damaged, so the next launch starts fresh from the ledger.
@@ -377,6 +409,10 @@ def main():
     if outcome == "finished":
         say("The mission is finished: tasks checked, verify passing, report written. " + review)
         return 0
+    if outcome == "parked":
+        say("Every task that can move is done; %d task(s) wait on the owner. Their questions are in the project's question system. "
+            "Answer them there, then: uv run --script fable/questions.py import, rerun the readiness check and launch again to resume. " % parked_count() + review)
+        return 4
     if outcome == "blocked":
         say("The run stopped on a recorded blocker. Read fable/BLOCKED.md, record your answer in fable/DECISIONS.md, delete fable/BLOCKED.md, rerun the readiness check and launch again.")
         return 3

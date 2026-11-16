@@ -49,8 +49,8 @@ directory this file is in). Run each with `uv run --script` and `--project`; eac
 `--help`. In order of use: `preflight.py` and `conversation_context.py`
 (phase 1), `init_handoff.py` (4), `audit_rules.py` (5), `spec_tool.py` and
 `render_handoff.py` (6), `readiness_check.py` and `system_review.py` (7), and
-`post_run_report.py` (9). Init copies the launcher, `fable/launch.py`, into
-the project for phase 8.
+`post_run_report.py` (9). Init copies `fable/launch.py` and
+`fable/questions.py` (judgment test, parking, question systems) into the project.
 
 Read each reference at the point this file names it:
 `references/preflight.md` and `references/conversation-context.md` (phase 1),
@@ -103,8 +103,9 @@ safety classifiers may refuse some steps even when the work is harmless.
 
 ## Phase 1: Discover
 
-Learn the project before you ask the owner anything, so that your questions
-are about decisions and not about facts you could have read.
+Detective work comes before judgment calls: most questions that look like
+the owner's are answered somewhere in the project. Ask the owner only what
+passes the judgment test in `references/fable-behaviors.md` section 14.
 
 Start with preflight. Most takeovers happen when the work is already close,
 and the project holds a goal, specs, standards, status notes, lessons from
@@ -118,7 +119,12 @@ uv run --script "${CLAUDE_SKILL_DIR}/scripts/preflight.py" --project /path/to/pr
 Close every BLOCKING gap before going further. The usual one in a project that
 is nearly done is a test suite that already passes: turn the open acceptance
 criteria into failing tests first, because the stop gate trusts the verify
-command. Take every QUESTION into the interview. `references/preflight.md`
+command. Preflight sorts each open question as "evidence can settle" or
+"judgment" and reports the counts. Settle the evidence ones yourself from the
+evidence ladder in `fable/handoff.json` and record them (`kind: "evidence"`,
+then `decision_interview.py --settle`); only judgment calls, each with its full
+record, go to the interview. Where facts should connect and do not, run
+`gap_analysis.py` (`references/gap-analysis.md`). `references/preflight.md`
 explains the report. When earlier sessions hold the story, add
 `--project-logs` (or `--conversations PATH`) so preflight also rebuilds
 `fable/CONTEXT.md` from the conversation logs; read its forks and issues
@@ -136,15 +142,12 @@ Then check what preflight cannot judge:
    into every session. Ask the owner whether such files exist and where they
    are. The model will apply every line in these files to the letter, so you
    need to know what they say.
-3. Run the build and the tests yourself. Note the exact commands, how long
-   they take and what fails today. A command you did not run does not belong
-   in the mission.
+3. Run the build and the tests yourself. Note the exact commands and what
+   fails today.
 4. Look at the git state: current branch, uncommitted work, remotes.
 
-Then report your understanding to the owner in a few short paragraphs: what
-the project is, how it builds and tests, what state it is in, what you think
-the job is, and what surprised you. Do this before the interview. A
-misunderstanding costs one sentence to correct now, and a whole run later.
+Then report your understanding to the owner in a few short paragraphs before
+the interview: what the project is, its state, the job, and what surprised you.
 
 ## Phase 2: Interview the owner once
 
@@ -235,7 +238,10 @@ uv run --script "${CLAUDE_SKILL_DIR}/scripts/init_handoff.py" --project . \
 Keep the defaults for model (the pinned ID `claude-fable-5-2`, because the
 `fable` alias can resolve to an older version), effort (`high`) and permission
 mode (`auto` on the owner's machine). Add `--ownership` only if the owner said
-the codebase is the model's to reshape. `--from-preflight` reuses preflight's
+the codebase is the model's to reshape. Point at the project's own systems
+with `--question-system bcf:<file>|markdown:<file>|github:<repo>` and
+`--decisions-log <file>`; set `evidence_ladder` in handoff.json to where each
+rung lives. `--from-preflight` reuses preflight's
 verify command, protected paths and open criteria. Init never overwrites a
 file without `--force` (which resets a filled-in mission too).  It prints the
 `.claude/settings.json` diff and writes it only on the owner's yes (prompt or
@@ -340,17 +346,17 @@ say so, so that it outlives the terminal:
 nohup uv run --script fable/launch.py > fable/.run/launch.out 2>&1 &
 ```
 
-The launcher refuses to start if a hook script is missing (Claude Code would
-silently skip it). It relaunches an unfinished run within `max_relaunches` and
-the budget, continues the conversation only when settings, instructions and
-MCP servers are unchanged (otherwise a continued Fable conversation fails),
-tells each new session where the last one stopped, and logs MCP servers that
+The launcher refuses to start if a hook script is missing or the owner has
+answers not yet imported (`fable/questions.py import`). It relaunches an
+unfinished run within `max_relaunches` and the budget, continues a
+conversation only when its context is unchanged, and logs MCP servers that
 failed to connect. Never add `--bare`: it skips the hooks. Details are in
 section 5 of `references/claude-code-setup.md`.
 
 Hand back: what was launched, on which branch and budget; how to watch it
 (`git log`, `fable/STATE.md`, `fable/.run/`); the exit codes (0 finished,
-1 unfinished, 2 refused, 3 stopped on a blocker); that phase 9 follows; and,
+1 unfinished, 2 refused, 3 blocker, 4 parked: the rest waits on answers in the
+question system); that phase 9 follows; and,
 on a laptop, to prevent sleep.
 
 ## Phase 9: Review with post_run_report.py and the diff

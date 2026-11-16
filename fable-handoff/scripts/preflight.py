@@ -474,9 +474,30 @@ def drafts(project, inputs, extracted, evals, test_cmds, test_runs, docs, goal_d
         "protected_paths": sorted(protect),
         "traps_for_mission": lessons,
         "what_worked": keep,
-        "decision_candidates": [q["text"] for q in extracted["open_questions"]][:15],
+        "question_triage": [triage_question(q["text"]) for q in extracted["open_questions"]],
+        "decision_candidates": [q["text"] for q in extracted["open_questions"] if triage_question(q["text"])["kind"] == "judgment"][:15],
         "goal_source": goal_doc,
     }
+
+
+# Detective work first. Most questions that look like judgment calls are
+# questions of fact the project can answer. A question is sorted as a judgment
+# call only when it asks for a policy or a preference; everything else starts
+# as "evidence can settle", to be searched on the evidence ladder. This is a
+# first sort, from wording only: the preparing agent confirms each one.
+JUDGMENT_CUES = re.compile(
+    r"\b(?:prefer\w*|want|wish|like (?:it|us|to)|should (?:we|i|you|the team)|do we (?:want|need)|policy|priorit\w+|"
+    r"trade-?offs?|acceptable|tolerance|taste|style|worth (?:it|the)|ok(?:ay)? (?:to|with)|willing|allowed to|"
+    r"which (?:approach|option|direction|look)|go with|risk appetite|brand|tone)\b",
+    re.IGNORECASE,
+)
+
+
+def triage_question(text: str) -> dict:
+    cue = JUDGMENT_CUES.search(text)
+    if cue:
+        return {"question": text, "kind": "judgment", "why": "asks for a policy or preference (\"%s\")" % cue.group(0)}
+    return {"question": text, "kind": "evidence", "why": "asks for a fact; search the evidence ladder before anyone asks the owner"}
 
 
 def previous_run(project: Path) -> dict:
@@ -593,7 +614,7 @@ def build_spec(project, docs, extracted, draft, test_runs, goal_doc, git) -> dic
         "guardrails": {"pre_approved": [], "forbidden": forbidden, "out_of_scope": []},
         "decisions": [],
         "defaults": [],
-        "open_questions": [{"question": q["text"], "source": q["where"]} for q in extracted["open_questions"]],
+        "open_questions": [{"question": q["text"], "source": q["where"], "kind": triage_question(q["text"])["kind"]} for q in extracted["open_questions"]],
         "traps": [{"text": e["text"], "instead": None, "source": e["where"]} for e in extracted["past_errors"]],
         "practices_to_keep": [{"text": e["text"], "source": e["where"]} for e in extracted["past_successes"]],
         "done_extra": [],
@@ -654,8 +675,14 @@ def markdown(project, inputs, gaps, draft, test_runs, instructions, git) -> str:
         out += ["- **Traps for 'Where things are'**, from past errors. Carry the real ones into the mission with what to do instead:"] + [f"  - {t}" for t in draft["traps_for_mission"]]
     if draft["what_worked"]:
         out += ["- **What worked**, worth keeping as decisions:"] + [f"  - {t}" for t in draft["what_worked"]]
-    if draft["decision_candidates"]:
-        out += ["- **Questions for the owner interview** (phase 2). Each answer goes to DECISIONS.md:"] + [f"  - {t}" for t in draft["decision_candidates"]]
+    triage = draft.get("question_triage") or []
+    if triage:
+        evidence = [t for t in triage if t["kind"] == "evidence"]
+        judgment = [t for t in triage if t["kind"] == "judgment"]
+        out += [f"- **Open questions: {len(evidence)} evidence can settle, {len(judgment)} judgment** (a first sort by wording; confirm each).",
+                "  Settle the evidence ones yourself from the evidence ladder and record them by evidence. Only judgment calls go to the owner in phase 2."]
+        out += [f"  - evidence: {t['question']}" for t in evidence[:20]]
+        out += [f"  - judgment: {t['question']} ({t['why']})" for t in judgment[:20]]
     out += ["", "## Next", "",
             "1. Close every BLOCKING gap and rerun preflight until it says READY FOR PREPARATION.",
             "2. Interview the owner with the questions above (phase 2).",

@@ -11,8 +11,15 @@ if it is chosen, and a recommendation. Each answer is written to
 fable/DECISIONS.md and to fable/handoff_spec.json (or fable/open_decisions.json
 when the project has no spec), and the question is closed.
 
-Open decisions come from `open_questions` in fable/handoff_spec.json, or from
-fable/open_decisions.json. Each needs: question, topic, what, why_it_matters,
+Only judgment calls reach the owner. Each question must pass the judgment
+test in fable/questions.py: every rung of the evidence ladder searched and
+recorded, and a matter of policy or preference, not of fact. Questions the
+evidence settles are answered with --settle and recorded "by evidence".
+
+Open decisions come from the project's question system when fable/handoff.json
+names one, else from `open_questions` in fable/handoff_spec.json, else from
+fable/open_decisions.json. Answers go to the project's decisions log
+(decisions_log) when set, else fable/DECISIONS.md. Each needs: question, topic, what, why_it_matters,
 options (two or more, each with choice and what_happens), recommendation and
 recommendation_reason. The text may not lean on bare decision numbers or IDs
 such as "D3", "Q-12" or "#4"; the owner should not have to look anything up.
@@ -43,23 +50,70 @@ BARE_ID = re.compile(
 LETTERS = "abcdefghij"
 
 
-def load(project: Path):
-    """(questions, where they came from, the whole document)."""
-    for rel in ("fable/handoff_spec.json", "fable/open_decisions.json"):
-        path = project / rel
-        if path.exists():
-            try:
-                doc = json.loads(path.read_text(encoding="utf-8"))
-            except ValueError as error:
-                sys.exit("decision_interview: %s is not valid JSON (%s)." % (rel, error))
-            questions = doc.get("open_questions", []) if isinstance(doc, dict) else []
-            return questions, path, doc
-    return [], None, None
+def questions_module(project: Path):
+    """The project's fable/questions.py, or the skill's copy."""
+    import importlib.util
+    path = project / "fable" / "questions.py"
+    if not path.exists():
+        path = Path(__file__).resolve().parent.parent / "assets" / "templates" / "questions.py"
+    spec = importlib.util.spec_from_file_location("fable_questions", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
-def problems(q: dict) -> list[str]:
-    """What keeps a question from being asked in plain words."""
-    out = ["missing %s" % key.replace("_", " ") for key in REQUIRED if not q.get(key)]
+class SpecSource:
+    """open_questions in fable/handoff_spec.json; answers become spec decisions."""
+
+    def __init__(self, path: Path):
+        self.path, self.doc = path, json.loads(path.read_text(encoding="utf-8"))
+        self.label = "fable/handoff_spec.json"
+
+    def open(self):
+        return list(self.doc.get("open_questions", []))
+
+    def answer(self, q, choice, full_reason, today):
+        self.doc["open_questions"] = [x for x in self.doc.get("open_questions", []) if x.get("question") != q["question"]]
+        self.doc.setdefault("decisions", []).append({"decision": decision_text(q, choice), "reason": full_reason, "source": "owner, decision interview, %s" % today})
+        self.path.write_text(json.dumps(self.doc, indent=2) + "\n", encoding="utf-8")
+
+
+class SystemSource:
+    """The project's question system (fable/open_decisions.json by default)."""
+
+    def __init__(self, project, config, qm):
+        self.project, self.qm, self.store = project, qm, qm.system(project, config)
+        spec = config.get("question_system") or qm.DEFAULT_SYSTEM
+        self.label = spec.get("path") or "%s issues in %s" % (spec.get("type"), spec.get("repo"))
+        self.records = self.store.load()
+
+    def open(self):
+        return [q for q in self.records if q.get("status", "open") == "open"]
+
+    def answer(self, q, choice, full_reason, today):
+        for r in self.records:
+            if r is q or (r.get("question") == q.get("question") and r.get("topic") == q.get("topic")):
+                r.update(status="imported", answer=choice, answer_reason=full_reason, answered=today)
+        self.store.save(self.records)
+        self.qm.resume_task(self.project, q.get("topic", ""), choice)
+
+
+def pick_source(project: Path, config: dict, qm):
+    spec = config.get("question_system")
+    if spec and spec != qm.DEFAULT_SYSTEM:
+        return SystemSource(project, config, qm)
+    spec_path = project / "fable" / "handoff_spec.json"
+    if spec_path.exists():
+        return SpecSource(spec_path)
+    return SystemSource(project, config, qm)
+
+
+def problems(q: dict, qm=None, rungs=None) -> list[str]:
+    """What keeps a question from going to the owner: the judgment test, then plain words."""
+    out = qm.record_problems(q, rungs) if qm is not None else []
+    if q.get("kind") == "evidence":
+        return out
+    out += ["missing %s" % key.replace("_", " ") for key in REQUIRED if not q.get(key)]
     options = q.get("options") or []
     if options and len(options) < 2:
         out.append("needs at least two options")
@@ -124,32 +178,18 @@ def decision_text(q: dict, choice: str) -> str:
     return "%s: %s" % (q["topic"], choice)
 
 
-def record(project: Path, source: Path, doc: dict, q: dict, choice: str, reason: str) -> None:
+def record(project: Path, config: dict, qm, source, q: dict, choice: str, reason: str) -> None:
     today = datetime.date.today().isoformat()
     match = next((o for o in q["options"] if o["choice"] == choice), None)
     full_reason = reason.rstrip(". ") + "." + (" What it means: " + match["what_happens"] if match else "")
-    # The spec, or the open decisions file.
-    doc["open_questions"] = [x for x in doc.get("open_questions", []) if x.get("question") != q["question"]]
-    if source.name == "handoff_spec.json":
-        doc.setdefault("decisions", []).append({"decision": decision_text(q, choice), "reason": full_reason, "source": "owner, decision interview, %s" % today})
-    else:
-        doc.setdefault("answered", []).append({**q, "answer": choice, "reason": full_reason, "answered": today})
-    source.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
-    # DECISIONS.md: add under "Made before the run", drop the line from the open questions.
-    path = project / "fable" / "DECISIONS.md"
-    text = path.read_text(encoding="utf-8") if path.exists() else "# Decisions\n\n## Made before the run\n\n## Open questions for the owner\n\nNone.\n"
-    entry = "- %s. Reason: %s (owner, decision interview, %s)\n" % (decision_text(q, choice), full_reason, today)
-    marker = "## Made before the run\n"
-    if marker in text:
-        head, tail = text.split(marker, 1)
-        nxt = tail.find("\n## ")
-        body, rest = (tail, "") if nxt < 0 else (tail[: nxt + 1], tail[nxt + 1 :])
-        text = head + marker + body.rstrip("\n") + "\n" + entry + "\n" + rest
-    else:
-        text = text.rstrip("\n") + "\n\n" + marker + "\n" + entry
-    # Rewrite the open questions section from what is still open.
+    source.answer(q, choice, full_reason, today)
+    log = qm.write_decision(project, config, "- %s. Reason: %s (owner, decision interview, %s)" % (decision_text(q, choice), full_reason, today))
+    if log != project / "fable" / "DECISIONS.md":
+        return
+    # In fable/DECISIONS.md, rewrite the open questions section from what is still open.
+    text = log.read_text(encoding="utf-8")
     heading = "## Open questions for the owner"
-    still_open = [x.get("question") for x in doc.get("open_questions", []) if x.get("question")]
+    still_open = [x.get("question") for x in source.open() if x.get("question")]
     listed = "\n".join("- " + x for x in still_open) if still_open else "None."
     if heading in text:
         head, tail = text.split(heading, 1)
@@ -158,7 +198,7 @@ def record(project: Path, source: Path, doc: dict, q: dict, choice: str, reason:
         text = head + heading + "\n\n" + listed + "\n" + ("\n" + rest if rest else "")
     else:
         text = text.rstrip("\n") + "\n\n" + heading + "\n\n" + listed + "\n"
-    path.write_text(text if text.endswith("\n") else text + "\n", encoding="utf-8")
+    log.write_text(text if text.endswith("\n") else text + "\n", encoding="utf-8")
 
 
 def main() -> int:
@@ -168,18 +208,22 @@ def main() -> int:
     parser.add_argument("--list", action="store_true", help="show every open decision as it would be asked; ask nothing")
     parser.add_argument("--answers", metavar="FILE", help="take answers from a JSON file instead of asking")
     parser.add_argument("--json", action="store_true", help="print the result as JSON")
+    parser.add_argument("--settle", action="store_true", help="answer the questions the evidence settles (kind \"evidence\" with an answer and its evidence), recorded as decisions by evidence")
     args = parser.parse_args()
 
     project = Path(args.project).expanduser().resolve()
-    questions, source, doc = load(project)
-    if source is None:
-        print("No open decisions: neither fable/handoff_spec.json nor fable/open_decisions.json exists.")
-        return 0
-    not_ready = [(q, problems(q)) for q in questions if problems(q)]
-    ready = [q for q in questions if not problems(q)]
+    qm = questions_module(project)
+    config = qm.load_config(project)
+    if args.settle:
+        return qm.cmd_settle(project, config)
+    rungs = qm.rung_names(config)
+    source = pick_source(project, config, qm)
+    questions = source.open()
+    not_ready = [(q, problems(q, qm, rungs)) for q in questions if problems(q, qm, rungs)]
+    ready = [q for q in questions if not problems(q, qm, rungs)]
 
     if args.check or args.json and not args.answers and not args.list:
-        report = {"source": str(source.relative_to(project)), "open": len(questions), "ready": len(ready),
+        report = {"source": source.label, "open": len(questions), "ready": len(ready),
                   "needs_writing_up": [{"question": q.get("question"), "problems": p} for q, p in not_ready]}
         if args.json:
             print(json.dumps(report, indent=2))
@@ -216,10 +260,10 @@ def main() -> int:
         if result is None:
             skipped.append(q["question"])
             continue
-        record(project, source, doc, q, *result)
+        record(project, config, qm, source, q, *result)
         recorded.append({"question": q["question"], "decision": decision_text(q, result[0]), "reason": result[1]})
         if not args.answers:
-            print("Recorded in fable/DECISIONS.md and %s." % source.relative_to(project))
+            print("Recorded in %s and %s." % (qm.decisions_path(project, config).relative_to(project), source.label))
     summary = {"recorded": recorded, "skipped": skipped, "not_ready": [q.get("question") for q, _ in not_ready]}
     if args.json:
         print(json.dumps(summary, indent=2))

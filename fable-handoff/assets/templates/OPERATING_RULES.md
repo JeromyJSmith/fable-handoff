@@ -16,7 +16,23 @@ Ordinary obstacles are part of the work: an error, a timeout, a failing or flaky
 
 Deliberate blockers are different: a tool call stopped by the handoff guard, a path the mission lists as forbidden, credentials or access that were withheld on purpose, a safety refusal. Someone decided these before the run. Leave them alone and do not look for a way around them. Note what you found in fable/DECISIONS.md, then carry on with the parts of the mission that do not depend on them.
 
-Stop early only when no remaining task can move without the owner. In that case write fable/BLOCKED.md with four things: what is blocked, what you tried, the exact decision or access you need, and what is already complete. Then write fable/REPORT.md. A BLOCKED.md with content is what allows an unfinished run to stop.
+## Detective work before judgment calls
+
+Most questions that look like judgment calls are detective work: the answer is already in the project, its specs, past decisions, the owner's notes, outside standards or earlier work. Asking instead of searching is not allowed. A question may wait on the owner only if both hold: (a) the evidence cannot decide it, after you searched every rung of the evidence ladder in fable/handoff.json and recorded what each rung gave; and (b) it is a matter of policy or preference, not a fact. Settle everything else yourself and record it in the decisions log as decided by evidence, with the evidence.
+
+Search the ladder in order: the project's own files and data (drawing text, detail titles, labels, schedules, the project's budget, code), its specs and standards, past decisions and rulings, the owner's notes and communications that your connectors and files reach, outside standards and references, and back-tests against earlier work. When things that should connect do not, run the gap analysis (references in fable/handoff.json; `gap_analysis.py` or the InfraNodus connector when it is available) and verify each bridge it suggests against the evidence. A bridge is a lead, never a decision. Record how each gap was closed.
+
+## Park and continue
+
+When a task truly needs a judgment call, do not stop and do not guess. Write the question record to a JSON file: question, topic, what, why_it_matters, options (each with what_happens), recommendation and recommendation_reason, kind "judgment", nature "policy" or "preference", evidence (one entry per rung: rung, searched, found), why_not_decided and would_settle. Then:
+
+    uv run --script fable/questions.py park --record <file> --task "<start of the task line>"
+
+That writes it to the project's question system and marks the task "(waiting on owner: <topic>)" in fable/STATE.md. The command refuses a record that fails the judgment test; then go back to the evidence. Continue with every task that does not depend on the answer. A parked task counts as finished for this run only with a complete record, and your fable/REPORT.md must name every parked question under "Waiting on owner".
+
+## Stopping early
+
+BLOCKED.md is only for a problem that stops all work. Stop early only when no remaining task can move at all, parked questions included. In that case write fable/BLOCKED.md with four things: what is blocked, what you tried, the exact decision or access you need, and what is already complete. Then write fable/REPORT.md. A BLOCKED.md with content is what allows an unfinished run to stop.
 
 ## Keep the ledger current
 
@@ -29,7 +45,7 @@ fable/STATE.md is the memory of this run. Your context will be compacted during 
 
 ## Record decisions
 
-Write every decision the owner might later question into fable/DECISIONS.md under "Made during the run": the choice, the alternatives you set aside, and the reason. One or two lines each. Put skipped actions and follow-ups under "Left for the owner".
+Write every decision the owner might later question into the decisions log (decisions_log in fable/handoff.json, or fable/DECISIONS.md) under "Made during the run". Mark decisions you settled from evidence "by evidence" and name the evidence: the choice, the alternatives you set aside, and the reason. One or two lines each. Put skipped actions and follow-ups under "Left for the owner".
 
 ## Evidence
 

@@ -275,6 +275,72 @@ def lessons_for_next_run(project, fable, blocks, problems, still_open, unproven,
     return proposals
 
 
+def load_questions(project):
+    import importlib.util
+    path = project / "fable" / "questions.py"
+    if not path.exists():
+        path = Path(__file__).resolve().parent.parent / "assets" / "templates" / "questions.py"
+    spec = importlib.util.spec_from_file_location("fable_questions", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def detective_sections(project, config):
+    """Questions settled by evidence, questions parked for the owner, and gaps found and bridged."""
+    out = []
+    settled = load_json(project / "fable" / "evidence_decisions.json", [])
+    out += ["## Settled by evidence", ""]
+    if settled:
+        by_kind = {}
+        for item in settled:
+            rungs = [e.get("rung") for e in item.get("evidence", []) if isinstance(e, dict) and e.get("found")] or ["(no rung named)"]
+            by_kind.setdefault(rungs[0], []).append(item)
+        out.append("%d question(s) answered from the evidence instead of asking the owner." % len(settled))
+        for kind, items in sorted(by_kind.items(), key=lambda kv: -len(kv[1])):
+            out += ["", "### %s (%d)" % (kind, len(items)), ""]
+            for item in items:
+                evidence = "; ".join("%s: %s" % (e.get("rung"), e.get("found")) for e in item.get("evidence", []) if isinstance(e, dict) and e.get("found"))
+                out.append("- %s: **%s**. Evidence: %s" % (item.get("question") or item.get("topic"), item.get("answer"), evidence))
+    else:
+        out.append("None recorded in fable/evidence_decisions.json.")
+    out.append("")
+    out += ["## Parked for the owner", ""]
+    try:
+        questions = load_questions(project)
+        records = [q for q in questions.system(project, config).load() if q.get("status", "open") in ("open", "answered")]
+    except Exception as error:
+        records, questions = [], None
+        out.append("The question system could not be read: %s" % error)
+    if records and questions is not None:
+        rungs = questions.rung_names(config)
+        for q in records:
+            problems = questions.record_problems(q, rungs)
+            out += ["- **%s** (%s%s): %s" % (q.get("topic"), q.get("nature", "?"), ", answered, import it" if q.get("status") == "answered" else "", q.get("question")),
+                    "  - Evidence searched: " + ("; ".join("%s: %s, found %s" % (e.get("rung"), e.get("searched"), e.get("found")) for e in q.get("evidence", []) if isinstance(e, dict)) or "none recorded"),
+                    "  - Why that does not decide it: %s" % q.get("why_not_decided", "not recorded"),
+                    "  - What would settle it: %s" % q.get("would_settle", "not recorded")]
+            if q.get("task"):
+                out.append("  - Waiting task: %s" % q["task"])
+            if problems:
+                out.append("  - Record incomplete: " + "; ".join(problems))
+    elif questions is not None:
+        out.append("No questions wait on the owner.")
+    out.append("")
+    gaps = load_json(project / "fable" / "gaps.json", {}).get("gaps", [])
+    out += ["## Gaps found and bridged", ""]
+    if gaps:
+        closed = [g for g in gaps if g.get("status") == "closed"]
+        out.append("%d gap(s) found, %d closed." % (len(gaps), len(closed)))
+        for g in gaps:
+            out.append("- %s (%s, %s): %s. %s" % (g.get("id"), g.get("kind"), g.get("source", "built-in"), g.get("lead"),
+                                                  "Closed: " + g["how_closed"] if g.get("status") == "closed" else "Still open."))
+    else:
+        out.append("No gap analysis recorded (fable/gaps.json).")
+    out.append("")
+    return out
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Review a project after an unattended run. Prints a Markdown review with a verdict; exit 0 only when the verdict is clean.",
@@ -330,7 +396,11 @@ def main():
         problems.append(("task", "the task ledger fable/STATE.md is missing"))
         body += ["fable/STATE.md is missing."]
     else:
-        body += ["%d task(s) done, %d open." % (len(done), len(still_open))]
+        parked = [t for t in still_open if "(waiting on owner:" in t]
+        still_open = [t for t in still_open if t not in parked]
+        body += ["%d task(s) done, %d open, %d waiting on the owner." % (len(done), len(still_open), len(parked))]
+        if parked:
+            body += ["", "Waiting on the owner (parked with a question; see below):"] + ["- " + task for task in parked]
         if still_open:
             problems.append(("task", "%d unchecked task(s) in fable/STATE.md" % len(still_open)))
             body += ["", "Open tasks:"] + ["- " + task for task in still_open]
@@ -429,6 +499,8 @@ def main():
     for title in ("Made during the run", "Left for the owner"):
         text = section_body(decisions, title)
         body += ["## %s (from fable/DECISIONS.md)" % title, ""] + (quote(text, 60) if text else ["Nothing recorded."]) + [""]
+
+    body += detective_sections(project, config)
 
     # Lessons for the next run
     blocks = guard_blocks(fable / ".run")

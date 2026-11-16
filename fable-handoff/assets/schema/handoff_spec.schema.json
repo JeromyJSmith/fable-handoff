@@ -385,7 +385,7 @@
     },
     "open_questions": {
       "type": "array",
-      "description": "Must be empty before rendering. decision_interview.py walks the owner through each one and moves the answer into decisions. Write each in plain words, with no bare decision numbers or IDs.",
+      "description": "Must be empty before rendering. A question may stay open for the owner only if it passes the judgment test: every rung of the evidence ladder searched and recorded, and a matter of policy or preference. decision_interview.py asks the owner; --settle records the questions the evidence decides.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -442,6 +442,60 @@
             "description": "The choice recommended, matching one option's choice."
           },
           "recommendation_reason": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "judgment",
+              "evidence"
+            ],
+            "description": "judgment: policy or preference the evidence cannot decide; evidence: detective work, answered by the preparing agent"
+          },
+          "nature": {
+            "enum": [
+              "policy",
+              "preference"
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "rung",
+                "searched",
+                "found"
+              ],
+              "properties": {
+                "rung": {
+                  "type": "string"
+                },
+                "searched": {
+                  "type": "string"
+                },
+                "found": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "why_not_decided": {
+            "type": "string"
+          },
+          "would_settle": {
+            "type": "string"
+          },
+          "answer": {
+            "type": "string"
+          },
+          "task": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "id": {
             "type": "string"
           }
         }

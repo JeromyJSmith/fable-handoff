@@ -345,6 +345,43 @@ def check_decisions(project):
     return [("PASS", "decisions", "no open questions")]
 
 
+def load_questions_module(project):
+    """The project's fable/questions.py, or the skill's copy when init has not installed it yet."""
+    import importlib.util
+    path = project / "fable" / "questions.py"
+    if not path.exists():
+        path = SCRIPTS.parent / "assets" / "templates" / "questions.py"
+    spec = importlib.util.spec_from_file_location("fable_questions", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def check_questions(project, config):
+    """Every open question passes the judgment test; answered ones are imported."""
+    questions = load_questions_module(project)
+    rows = []
+    if not isinstance(config.get("evidence_ladder"), list) or not config.get("evidence_ladder"):
+        rows.append(("WARN", "evidence ladder", "fable/handoff.json has no evidence_ladder, so the default six rungs apply. Name where each rung lives in this project."))
+    try:
+        records = questions.system(project, config).load()
+    except Exception as error:
+        return rows + [("FAIL", "questions", "the question system in fable/handoff.json could not be read: %s" % str(error)[:200])]
+    rungs = questions.rung_names(config)
+    open_q = [q for q in records if q.get("status", "open") == "open"]
+    refused = [(q, questions.record_problems(q, rungs)) for q in open_q]
+    refused = [(q, p) for q, p in refused if p]
+    answered = [q.get("topic") for q in records if q.get("status") == "answered"]
+    if refused:
+        detail = "; ".join('"%s": %s' % (q.get("question", "")[:60], p[0]) for q, p in refused[:3])
+        return rows + [("FAIL", "questions", "%d open question(s) fail the judgment test: %s. Search the evidence ladder; settle what the evidence decides (questions.py settle) and record the full search for the rest." % (len(refused), detail))]
+    if answered:
+        return rows + [("FAIL", "questions", "the owner answered %d question(s) not imported yet (%s). Run: uv run --script fable/questions.py import" % (len(answered), ", ".join(answered[:5])))]
+    if open_q:
+        return rows + [("WARN", "questions", "%d judgment call(s) wait on the owner, each with a full record. Tasks that depend on them must be parked; the rest of the run continues." % len(open_q))]
+    return rows + [("PASS", "questions", "no open questions in the question system")]
+
+
 def check_git_branch(project, config):
     if git(project, "rev-parse", "--is-inside-work-tree").returncode != 0:
         return False, [("FAIL", "git branch", "the project is not a git repository. Run git init and commit, so that the run can be reviewed and undone.")]
@@ -663,6 +700,7 @@ def main():
     rows += check_operating_rules(project)
     rows += ledger_rows
     rows += check_decisions(project)
+    rows += check_questions(project, config)
     rows += branch_rows
     if is_repo:
         rows += check_git_clean(dirty_before, dirty_after, args.allow_dirty)

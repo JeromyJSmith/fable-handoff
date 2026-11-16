@@ -10,8 +10,13 @@ is finished. It checks, in this order:
 
 1. fable/BLOCKED.md has content: allow the stop. The model has recorded that
    nothing can move without the owner.
-2. fable/STATE.md has unchecked tasks: block and list them.
+2. fable/STATE.md has unchecked tasks: block and list them. A task marked
+   "(waiting on owner: <topic>)" counts as finished for this run only when a
+   question with that topic is open in the project's question system with a
+   complete record (fable/questions.py check passes it). Otherwise it is open.
 3. The verify command from fable/handoff.json fails: block and show the output.
+   With parked tasks, a failing verify is expected, so the stop is allowed
+   once fable/REPORT.md names every parked question.
 4. fable/REPORT.md is missing or empty: block.
 5. Otherwise allow the stop.
 
@@ -36,6 +41,7 @@ import re
 import signal
 import subprocess
 import sys
+from pathlib import Path
 
 TASK_LINE = re.compile(r"^\s*[-*+]\s+\[( |x|X)\]\s+(.*)$")
 OUTPUT_TAIL_LINES = 40
@@ -144,6 +150,52 @@ def checked_task_commands(state_text):
     return out
 
 
+def load_questions(project):
+    """The project's fable/questions.py as a module, or None."""
+    path = os.path.join(project, "fable", "questions.py")
+    if not os.path.isfile(path):
+        return None
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("fable_questions", path)
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        return None
+    return module
+
+
+def split_parked(project, config, tasks):
+    """(parked tasks with a complete question record, tasks still open, problems)."""
+    questions = load_questions(project)
+    parked, still_open, problems = [], [], []
+    records = None
+    for task in tasks:
+        match = re.search(r"\(waiting on owner: ([^)]+)\)", task)
+        if not match:
+            still_open.append(task)
+            continue
+        topic = match.group(1).strip()
+        if questions is None:
+            still_open.append(task)
+            problems.append("%s: fable/questions.py is missing, so the question cannot be checked" % topic)
+            continue
+        if records is None:
+            try:
+                records = questions.system(Path(project), config).load()
+            except Exception as error:
+                records = []
+                problems.append("the question system could not be read (%s)" % error)
+        record = next((q for q in records if q.get("topic") == topic and q.get("status", "open") == "open"), None)
+        found = questions.record_problems(record, questions.rung_names(config)) if record else ["no open question with this topic in the question system"]
+        if found:
+            still_open.append(task)
+            problems.append("%s: %s" % (topic, "; ".join(found)))
+        else:
+            parked.append((task, topic))
+    return parked, still_open, problems
+
+
 def tail(output):
     lines = (output or "").strip().splitlines()[-OUTPUT_TAIL_LINES:]
     return "\n".join(lines)[-OUTPUT_TAIL_CHARS:] or "(the command printed nothing)"
@@ -171,8 +223,21 @@ def evaluate(project, config):
             "with the first open task.",
             {"open_tasks": -1, "verify": "not run"},
         )
-    tasks = open_tasks(state)
+    parked, tasks, park_problems = split_parked(project, config, open_tasks(state))
     if tasks:
+        if park_problems:
+            return (
+                "The run is not finished. These tasks are marked as waiting on the owner, but their\n"
+                "question does not pass the judgment test, so they still count as open:\n"
+                + "\n".join("  - " + p for p in park_problems) + "\n"
+                "\n"
+                "What to do now: search the evidence ladder in fable/handoff.json first. Most questions\n"
+                "are settled by evidence: decide those and record them by evidence. Park only a true\n"
+                "policy or preference call, with its full record, through:\n"
+                "  uv run --script fable/questions.py park --record <file> --task \"<task>\"\n"
+                "Then continue with every task that does not depend on it.",
+                {"open_tasks": len(tasks), "verify": "not run", "parked": len(parked)},
+            )
         shown = ["  - " + task for task in tasks[:20]]
         if len(tasks) > 20:
             shown.append("  ... and %d more" % (len(tasks) - 20))
@@ -184,11 +249,10 @@ def evaluate(project, config):
             "verified it. If a task no longer applies, remove it from the list and record the\n"
             "reason in fable/DECISIONS.md.\n"
             "\n"
-            "If no remaining task can move without the owner, write fable/BLOCKED.md (what is\n"
-            "blocked, what you tried, the exact decision or access you need, what is already\n"
-            "complete), then write fable/REPORT.md. With a BLOCKED.md that has content you will be\n"
-            "allowed to stop.",
-            {"open_tasks": len(tasks), "verify": "not run"},
+            "If a task needs a true judgment call (policy or preference that the evidence ladder\n"
+            "cannot decide), park it with fable/questions.py and keep working on the rest.\n"
+            "Write fable/BLOCKED.md only when nothing at all can move.",
+            {"open_tasks": len(tasks), "verify": "not run", "parked": len(parked)},
         )
 
     # A checked box is a claim. Where the task names its own check, run it.
@@ -234,6 +298,20 @@ def evaluate(project, config):
                 "fable/REPORT.md, and you will be allowed to stop."
                 % (command, code, tail(output)),
                 {"open_tasks": 0, "verify": "cannot run"},
+            )
+        if code != 0 and parked:
+            report = read_text(os.path.join(fable, "REPORT.md")) or ""
+            unnamed = [topic for _, topic in parked if topic not in report]
+            if not unnamed:
+                return None, {"open_tasks": 0, "verify": "failed, parked", "parked": len(parked)}
+            return (
+                "Every task that can move is done; %d task(s) wait on the owner. The verify command\n"
+                "still fails, which is expected while they wait. Before you stop, write\n"
+                "fable/REPORT.md with a section \"Waiting on owner\" that names each parked question:\n"
+                % len(parked) + "\n".join("  - " + t for t in unnamed) + "\n"
+                "and what each one blocks. Do not use BLOCKED.md for this; it is only for problems\n"
+                "that stop all work.",
+                {"open_tasks": 0, "verify": "failed, parked", "parked": len(parked)},
             )
         if code != 0:
             result = "timed out after %s seconds" % timeout if code is None else "exit code %d" % code

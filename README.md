@@ -34,16 +34,16 @@ Install a release tag. `main` can change at any time.
 
 ```bash
 # Recommended: a tagged release, into ~/.claude/skills/fable-handoff
-curl -fsSL https://raw.githubusercontent.com/JeromyJSmith/fable-handoff/v1.1.0/install.sh | bash -s -- --ref v1.1.0
+curl -fsSL https://raw.githubusercontent.com/JeromyJSmith/fable-handoff/v1.2.0/install.sh | bash -s -- --ref v1.2.0
 
 # Into the current repo's .claude/skills instead
-curl -fsSL https://raw.githubusercontent.com/JeromyJSmith/fable-handoff/v1.1.0/install.sh | bash -s -- --ref v1.1.0 --project
+curl -fsSL https://raw.githubusercontent.com/JeromyJSmith/fable-handoff/v1.2.0/install.sh | bash -s -- --ref v1.2.0 --project
 
 # As a Claude Code plugin (2.1.275 or later)
 /plugin install fable-handoff --marketplace JeromyJSmith/fable-handoff
 
 # By hand
-git clone --branch v1.1.0 https://github.com/JeromyJSmith/fable-handoff && cp -R fable-handoff/fable-handoff ~/.claude/skills/
+git clone --branch v1.2.0 https://github.com/JeromyJSmith/fable-handoff && cp -R fable-handoff/fable-handoff ~/.claude/skills/
 ```
 
 The installer checks for git and uv, prints the exact commit it installed,
@@ -87,6 +87,46 @@ The full procedure is in `fable-handoff/SKILL.md`.
   master. The permission mode is `auto`, never `bypassPermissions`, unless you
   set it. The readiness gate always runs before launch.
 
+## Detective work before judgment calls
+
+Most of what looks like a judgment call is detective work: the answer is
+already in the drawings, labels, budget, specs, past rulings, the owner's
+notes, outside standards or earlier work. A question may go to the owner only
+if both hold:
+
+1. The evidence cannot decide it. Every rung of the evidence ladder in
+   `fable/handoff.json` was searched, and the record says what was searched,
+   what was found, why that does not decide it, and what answer would settle it.
+2. It is a matter of policy or preference, not a fact.
+
+`questions.py check`, `decision_interview.py --check`, the readiness check and
+the stop gate refuse a question without that record. Preflight sorts open
+questions into "evidence can settle" and "judgment"; the preparing agent
+answers the first kind and records them "by evidence"
+(`decision_interview.py --settle`). When evidence that should connect does
+not, `gap_analysis.py` finds the unconnected concepts (InfraNodus when
+connected, else a built-in graph) and suggests bridges to verify.
+
+## Park and continue
+
+A true judgment call during the run does not stop it. `fable/questions.py
+park` writes the question to the project's own question system and marks the
+task "waiting on owner"; the run continues with everything else. Choose the
+system at init:
+
+```bash
+init_handoff.py ... --question-system bcf:coordination/questions.bcf   # BCF 3.0, one topic per question
+init_handoff.py ... --question-system markdown:docs/decisions.md       # a table in your decisions file
+init_handoff.py ... --question-system github:owner/repo                # issues labelled fable-question, via gh
+init_handoff.py ... --decisions-log docs/decisions.md                  # decisions go here, not a parallel copy
+```
+
+The default is `fable/open_decisions.json`. Answer in that system (close the
+BCF topic with a comment, fill the table row, close the issue with a comment),
+then `uv run --script fable/questions.py import` brings the answers in and the
+parked tasks resume on the next launch. The launcher exits 4 when everything
+that can move is done and the rest waits on answers.
+
 ## Decision interview
 
 `decision_interview.py` walks you through open decisions one at a time,
@@ -103,13 +143,14 @@ terminal.
 | --- | --- |
 | `fable-handoff/SKILL.md` | The procedure |
 | `fable-handoff/references/` | Deeper guides; `sources.md` lists the Anthropic docs each rule depends on |
-| `fable-handoff/scripts/` | Preflight, decision interview, init and uninstall, readiness, spec, context, report and audit tools |
+| `fable-handoff/scripts/` | Preflight, decision interview, gap analysis, init and uninstall, readiness, spec, context, report and audit tools |
 | `fable-handoff/assets/` | Hooks, agents, templates, jq modules, JSON Schema |
 | `fable-handoff/evals/` | Behavior cases for `claude plugin eval` |
-| `tests/`, `pyproject.toml`, `uv.lock` | Acceptance suite (267 tests), run with `uv run pytest` |
+| `tests/`, `pyproject.toml`, `uv.lock` | Acceptance suite, run with `uv run pytest` |
 | `docs/USER_GUIDE.md` | Step-by-step guide ([live version](https://claude.ai/artifact/SuJs4jg2YGcp7kqd1qGbQU)) |
 | `docs/SPEC.md` | Build specification the tests check |
 | `install.sh`, `.claude-plugin/` | Installers |
+| `.github/workflows/ci.yml` | `uv run pytest` on Ubuntu and macOS, Python 3.11 and 3.14 |
 
 ## Testing
 
@@ -124,7 +165,7 @@ set `FABLE_HANDOFF_SKILL_DIR=/path/to/fable-handoff`.
 
 1. Update `CHANGELOG.md` and the version in `pyproject.toml` and `.claude-plugin/*.json`.
 2. Run `uv run pytest`.
-3. Tag and push: `git tag -a v1.1.0 -m "fable-handoff 1.1.0" && git push origin v1.1.0`.
+3. Tag and push: `git tag -a v1.2.0 -m "fable-handoff 1.2.0" && git push origin v1.2.0`.
 4. Point the install commands in this README at the new tag.
 
 ## Keeping it correct

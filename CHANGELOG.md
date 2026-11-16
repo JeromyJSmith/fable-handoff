@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.0 (2026-11-16)
+
+Detective work before judgment calls; park and continue.
+
+- The judgment test, in the mission template, the run's operating rules and `fable-behaviors.md`: a question goes to the owner only when every rung of the evidence ladder (in `fable/handoff.json`) was searched and recorded, and it is a matter of policy or preference. `questions.py check`, `decision_interview.py --check`, the readiness check and the stop gate refuse a question without that record.
+- Preflight sorts open questions into "evidence can settle" and "judgment" and reports the counts; the interview takes only judgment calls; `decision_interview.py --settle` records the rest as decisions by evidence.
+- Gap analysis and bridging (`gap_analysis.py`, `references/gap-analysis.md`): InfraNodus when connected, else a built-in concept graph (networkx 3.7, pinned in the script's uv header). Gaps and how each closed are recorded.
+- Park and continue: `fable/questions.py park` writes a true judgment call to the project's question system (BCF 3.0, a markdown decisions table, GitHub issues, or `fable/open_decisions.json`), marks the task "waiting on owner" and the run goes on. The stop gate counts a parked task as finished for this run only with a complete record. The launcher exits 4 when the rest waits on answers and refuses to start until answers are imported. BLOCKED.md is only for problems that stop all work.
+- `--question-system` and `--decisions-log` point the interview and the run at the project's own systems instead of parallel copies.
+- The post-run review shows questions settled by evidence (by kind, with the evidence), questions parked with their records, and gaps found and bridged.
+- CI: `uv run pytest` on Ubuntu and macOS, Python 3.11 and 3.14.
+
 ## 1.1.0 (2026-11-16)
 
 - uv is the only Python manager: every script and hook is a PEP 723 script run with `uv run --script`; hooks, launcher and installer use uv; tests run with `uv run pytest` from `pyproject.toml` and `uv.lock`.
