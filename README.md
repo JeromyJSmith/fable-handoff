@@ -150,7 +150,6 @@ terminal.
 | `docs/USER_GUIDE.md` | Step-by-step guide ([live version](https://claude.ai/artifact/SuJs4jg2YGcp7kqd1qGbQU)) |
 | `docs/SPEC.md` | Build specification the tests check |
 | `install.sh`, `.claude-plugin/` | Installers |
-| `.github/workflows/ci.yml` | `uv run pytest` on Ubuntu and macOS, Python 3.11 and 3.14 |
 
 ## Testing
 

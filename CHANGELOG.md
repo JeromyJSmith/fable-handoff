@@ -10,7 +10,6 @@ Detective work before judgment calls; park and continue.
 - Park and continue: `fable/questions.py park` writes a true judgment call to the project's question system (BCF 3.0, a markdown decisions table, GitHub issues, or `fable/open_decisions.json`), marks the task "waiting on owner" and the run goes on. The stop gate counts a parked task as finished for this run only with a complete record. The launcher exits 4 when the rest waits on answers and refuses to start until answers are imported. BLOCKED.md is only for problems that stop all work.
 - `--question-system` and `--decisions-log` point the interview and the run at the project's own systems instead of parallel copies.
 - The post-run review shows questions settled by evidence (by kind, with the evidence), questions parked with their records, and gaps found and bridged.
-- CI: `uv run pytest` on Ubuntu and macOS, Python 3.11 and 3.14.
 
 ## 1.1.0 (2026-11-16)
 
