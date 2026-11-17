@@ -101,15 +101,11 @@ uv run --script assets/presets/marpa/export_decided_cases.py --marpa <MARPA repo
 uv run --script scripts/detective_backtest.py --project <project> --cases assets/presets/marpa/decided_cases.json --min-accepted 10 --target 0.9 --write-calibration
 ```
 
-## Two repositories
+## Three places
 
-The run's home is the standard repository: decoding, takeoff, pricing, the API and the back-test, on the run branch. The desk app is a companion repository (`companion_repositories` in handoff.json):
+The owner's correction of 2026-11-17: MARPA budgets by allowances spread top-down, and the working allocation engine already does that. The run's home is the standard repository. The desk app is a companion repository (`companion_repositories`): the readiness check requires it on its own run branch with no uncommitted changes; the guard allows writes there and applies the protected paths there too. The allocation engine (`/Volumes/MARPA/method/allocation`) is a related location to read and run (`related_locations`): the guard's file tools cannot write it, and the run uses only its own commands.
 
-- the readiness check refuses to launch unless the desk repository is on its own run branch (`fable/marpa-1`, never main) and has no uncommitted changes;
-- the guard allows writes inside it and applies the protected paths there too, for file tools and shell commands;
-- the verify command runs both test suites: `uv run pytest -q tests`, then `bun run test` in the desk, then the budget back-test.
-
-What is still missing for two repositories: the stop gate and the post-run review look only at the home repository's commits and diff; the desk's own CLAUDE.md is not audited unless it is passed with `audit_rules.py --extra`; and the launcher creates no branch, so the desk branch is made by hand before launch.
+What is still missing for more than one repository: the stop gate and the post-run review look only at the home repository's commits; the desk's own CLAUDE.md is audited only when passed with `audit_rules.py --extra`; the desk branch is made by hand before launch. Feeding the desk's budget section goes through its published projection (`scripts/project_browser_parquet.py`, Pixeltable), which this preset's guard blocks (`pxt` and the Pixeltable home); the owner decides whether the run may publish there or hands the budget over another way.
 
 ## Launch requirements
 
@@ -119,16 +115,13 @@ What is still missing for two repositories: the stop gate and the post-run revie
 - built by the run as its first tasks, each named in fable/STATE.md: takeoff from geometry, spatial relationships, the back-test against real budgets;
 - files the mission starts from: PRODUCT_GOALS.md, SYSTEM.md, the VWX workflow, format notes and runner, intake.py, the estimating design and the desk revision plan.
 
-## Budget tolerances
+## Definition of done and tolerances
 
-`budget_tolerance` in handoff.json, proposed from MARPA's quantity tolerances; the owner confirms or changes them:
+`definition_of_done` points at docs/standard/DEFINITION_OF_DONE.md and `GET /done`, which the documentation session is writing; its fifteen rows are the run's stop condition. The verify command checks the file exists, runs the standard's tests, the allocation engine's tests and the desk's tests, then `done_check.py --check`, which the run writes to read the same rows. `budget_tolerance` holds the owner's targets: held-out total error within 10% (earlier baseline 13%), 0 unexplained cents and 0 duplicated money.
 
-| Level | Tolerance | Why |
-| --- | --- | --- |
-| A line's quantity | area 5%, length 5%, count exact, volume 10% | budgets round to whole units and add waste |
-| A line's total | 10% | quantity within 5% times the project's own rate, plus rounding |
-| A slot's total | 7.5% | over and under on lines in one slot partly cancel |
-| The project total | 5% | the firm prices to the total; more than 5% would change a bid |
+## No language model in a calculation
+
+`deterministic_code` names the calculation code (globs in this repository and the desk's workbook code) and the files allowed to ask Jev. The readiness check and the stop gate both refuse a model call there.
 
 ## Trial on a copy (2026-11-17)
 

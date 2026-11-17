@@ -78,7 +78,7 @@ def test_init_with_the_marpa_preset_writes_marpas_configuration(tmp_path):
     mission = (project / "fable/MISSION.md").read_text()
     assert mission.index("## MARPA") < mission.index("\n## Done") and "Class-word grammar" in (project / "fable/OPERATING_RULES.md").read_text()
     # the owner's product direction: takeoff, the back-test against real budgets, Solomon, intake to budget, two repositories
-    for words in ["Takeoff from geometry", "budget_backtest.py --check", "marpa_solomon_2605", "Intake ends in the budget", "companion repository", "PRODUCT_GOALS.md", "s01_decode", "drawn against budgeted"]:
+    for words in ["marpa_solomon_2605", "Allowances, spread top-down", "Held-out estimates", "DEFINITION_OF_DONE.md", "budgetLoad.ts", "AEC-ALLOWANCE-METHOD.md", "s01_decode", "Passing tests alone is not done"]:
         assert words in mission, words
     rules = (project / "fable/OPERATING_RULES.md").read_text()
     assert rules.rstrip().endswith("Never a bare decision number.") and "writer_lock.py take" in rules
@@ -89,10 +89,14 @@ def test_the_preset_verify_command_is_used_when_none_is_given(tmp_path):
     proc = run([*script("init_handoff.py"), "--project", str(project), "--preset", "marpa", "--apply-settings"])
     assert proc.returncode == 0, proc.stderr
     cfg = read_cfg(project)
-    assert cfg["verify_command"] == "uv run pytest -q tests && (cd /Volumes/MARPA/apps/marpa-desk && bun run test) && test -f budget_backtest.py && uv run budget_backtest.py --check"
-    assert cfg["verify_timeout_seconds"] == 5400
-    tol = cfg["budget_tolerance"]
-    assert tol["line_total_pct"] == 10.0 and tol["project_total_pct"] == 5.0 and set(tol["why"]) == {"line_total_pct", "slot_total_pct", "project_total_pct"}
+    assert cfg["verify_command"].startswith("test -f docs/standard/DEFINITION_OF_DONE.md && uv run pytest -q tests")
+    assert "(cd /Volumes/MARPA/method/allocation && uv run pytest -q)" in cfg["verify_command"]
+    assert "bun run test" in cfg["verify_command"] and cfg["verify_command"].endswith("test -f done_check.py && uv run done_check.py --check")
+    assert cfg["verify_timeout_seconds"] == 7200
+    done = cfg["definition_of_done"]
+    assert done["source"] == "docs/standard/DEFINITION_OF_DONE.md" and done["endpoint"] == "GET /done" and len(done["rows"]) == 15
+    assert cfg["budget_tolerance"]["held_out_total_pct"] == 10.0 and cfg["budget_tolerance"]["allocation_unexplained_cents"] == 0
+    assert cfg["related_locations"][0]["path"] == "/Volumes/MARPA/method/allocation" and cfg["related_locations"][0]["role"] == "read and run"
 
 
 def test_an_unknown_preset_is_refused_and_writes_nothing(tmp_path):
@@ -473,3 +477,42 @@ def test_the_companion_repository_must_be_on_its_run_branch_and_clean_and_the_gu
         assert no.returncode == 2 and "companion repository" in no.stderr, target
     no = hook(project, "fable_guard.py", {"tool_name": "Bash", "tool_input": {"command": "echo x > %s" % (desk / "tokens.css")}, "cwd": str(project)})
     assert no.returncode == 2
+
+
+# --------------------------------------------------------------------------- no language model in a calculation
+
+def test_readiness_and_the_stop_gate_refuse_a_model_call_in_calculation_code(tmp_path):
+    from conftest import hook, prepared_project
+    project = prepared_project(tmp_path)
+    (project / "calc.py").write_text("def total(lines):\n    return sum(l['qty'] * l['rate'] for l in lines)\n")
+    (project / "jev_schema.py").write_text("from jev_client import client\ndef ask(q):\n    return client().system_one({}, q)\n")
+    write_cfg(project, deterministic_code=marpa_config()["deterministic_code"])
+    commit_all(project, "plain calc")
+    _, data = readiness(project)
+    assert statuses(data)["no model calls"] == "PASS"
+    (project / "budget_estimate.py").write_text("import anthropic\n\ndef rate(c):\n    return anthropic.Anthropic().messages.create(model='x')\n")
+    commit_all(project, "a model in a calculation")
+    _, data = readiness(project)
+    row = next(r for r in data["rows"] if r["check"] == "no model calls")
+    assert row["status"] == "FAIL" and "budget_estimate.py:1" in row["detail"] and "jev_schema.py" not in row["detail"]
+    # the stop gate holds the run on the same finding once the tasks and the verify command pass
+    state = (project / "fable/STATE.md").read_text().replace("- [ ]", "- [x]")
+    (project / "fable/STATE.md").write_text(state)
+    (project / "fable/REPORT.md").write_text("Done.\n")
+    write_cfg(project, verify_command="true")
+    proc = hook(project, "fable_stop_gate.py", {"session_id": "s", "stop_hook_active": False})
+    assert "calls a language model" in (proc.stdout + proc.stderr) and "budget_estimate.py:4" in (proc.stdout + proc.stderr)
+    (project / "budget_estimate.py").write_text("def rate(a, q):\n    return sum(a) / sum(q)\n")
+    proc = hook(project, "fable_stop_gate.py", {"session_id": "s", "stop_hook_active": False})
+    assert "calls a language model" not in (proc.stdout + proc.stderr)
+
+
+def test_a_source_outside_the_project_is_checked_by_its_absolute_path(tmp_path):
+    dm = detective()
+    outside = tmp_path / "allocation" / "SPEC.md"
+    outside.parent.mkdir()
+    outside.write_text("x\n")
+    cfg = {"detective_functions": [{"name": "back-test", "looks_at": "a", "returns": "b", "strength": "decisive", "status": "planned",
+                                    "test": "t", "project_sources": [str(outside), str(tmp_path / "allocation" / "MISSING.md")]}]}
+    problems = dm.registry_problems(cfg, tmp_path / "proj")
+    assert problems == ["'back-test' reads %s, which matches nothing in this project" % (tmp_path / "allocation" / "MISSING.md")]

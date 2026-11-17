@@ -138,7 +138,11 @@ def registry_problems(config: dict, project: Path | None = None) -> list[str]:
                     src = str(src).strip()
                     if src.lower().startswith(EXTERNAL):
                         continue
-                    if not any(project.glob(src)) and not (project / src).exists():
+                    if Path(src).is_absolute():
+                        exists = Path(src).exists()
+                    else:
+                        exists = any(project.glob(src)) or (project / src).exists()
+                    if not exists:
                         out.append("'%s' reads %s, which matches nothing in this project" % (name, src))
         for key in ("looks_at", "returns", "strength", "status", "test"):
             if not str(f.get(key) or "").strip():

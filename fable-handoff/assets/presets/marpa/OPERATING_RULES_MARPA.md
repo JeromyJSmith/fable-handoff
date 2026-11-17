@@ -4,7 +4,9 @@ Building the product:
 
 - Quantities come from the drawing's geometry, never typed in. Each budget line records the class, the geometry it was measured from, the unit, the rate and where the rate came from.
 - A gap between a generated budget and the firm's real one is explained in plain words or parked as a question. Never close a gap by changing the real budget or the tolerance.
-- In the desk repository, work only on its run branch and keep its look and design tokens.
+- In the desk repository, work only on its run branch and keep its look and design tokens. Its budget section (bids, subcontractors, the administration markup) must keep working unchanged.
+- The allocation engine in /Volumes/MARPA/method/allocation is read and run through its own commands only; never edit its code, guide or adjustments.
+- No language model call in any calculation. Jev only for bounded decisions under a written schema, in the files deterministic_code allows.
 
 Keeping the standard (the owner's rules in CLAUDE.md):
 

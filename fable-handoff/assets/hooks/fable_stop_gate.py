@@ -196,6 +196,46 @@ def split_parked(project, config, tasks):
     return parked, still_open, problems
 
 
+# Deterministic code: when "deterministic_code" in fable/handoff.json names
+# the calculation code (globs), no file there may call a language model. Jev
+# and other model calls belong only in the files listed as "allowed" (for
+# example the module that asks a written schema).
+MODEL_CALL = (
+    r"^\s*(?:import|from)\s+(?:anthropic|openai|litellm|ollama|typesafe\w*)\b|\bopenrouter\.ai\b|\.messages\.create\(|"
+    r"\bchat\.completions\b|\bsystem_one\(|\bjev_client\b|\bjev_schema\.ask\(|\bgenerateText\(|\bstreamText\("
+)
+
+
+def model_call_findings(project, config):
+    """[(file, line number, text)] for every model call inside the deterministic code."""
+    import fnmatch
+    import re
+    spec = config.get("deterministic_code") or {}
+    globs = [g for g in spec.get("paths") or [] if isinstance(g, str)]
+    if not globs:
+        return []
+    allowed = [g for g in spec.get("allowed") or [] if isinstance(g, str)]
+    pattern = re.compile(spec.get("pattern") or MODEL_CALL, re.MULTILINE)
+    roots = [project] + [os.path.realpath(os.path.expanduser(str(c.get("path")))) for c in config.get("companion_repositories") or []
+                         if isinstance(c, dict) and c.get("path")]
+    found = []
+    for g in globs:
+        base = project
+        for root in roots[1:]:
+            if g.startswith(root + os.sep):
+                base, g = root, os.path.relpath(g, root)
+        import glob as globmod
+        for path in sorted(globmod.glob(os.path.join(base, g), recursive=True)):
+            rel = os.path.relpath(path, base)
+            if not os.path.isfile(path) or any(fnmatch.fnmatch(rel, a) for a in allowed):
+                continue
+            text = read_text(path) or ""
+            for m in pattern.finditer(text):
+                line = text.count("\n", 0, m.start()) + 1
+                found.append((rel, line, text.splitlines()[line - 1].strip()[:120]))
+    return found
+
+
 def tail(output):
     lines = (output or "").strip().splitlines()[-OUTPUT_TAIL_LINES:]
     return "\n".join(lines)[-OUTPUT_TAIL_CHARS:] or "(the command printed nothing)"
@@ -332,6 +372,17 @@ def evaluate(project, config):
             )
         verify = "passed"
 
+    calls = model_call_findings(project, config)
+    if calls:
+        return (
+            "The run is not finished: the calculation code calls a language model, and every calculation\n"
+            "must be plain, tested code (deterministic_code in fable/handoff.json):\n"
+            + "\n".join("  - %s:%d %s" % c for c in calls[:10]) + "\n"
+            "\n"
+            "What to do now: replace each call with coded, tested logic. A bounded decision under a\n"
+            "written schema belongs in the files deterministic_code lists as allowed, never in a calculation.",
+            {"open_tasks": 0, "verify": verify, "model_calls": len(calls)},
+        )
     report = read_text(os.path.join(fable, "REPORT.md"))
     if not report or not report.strip():
         return (

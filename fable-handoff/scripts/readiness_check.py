@@ -442,6 +442,21 @@ def check_launch_requires(project, config):
     return [("PASS", "launch requires", "every function and file the mission depends on is in place or planned as a first task")]
 
 
+def check_model_calls(project, config):
+    """No language model call inside the calculation code (deterministic_code)."""
+    if not (config.get("deterministic_code") or {}).get("paths"):
+        return []
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("fable_stop_gate_scan", SCRIPTS.parent / "assets" / "hooks" / "fable_stop_gate.py")
+    gate = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gate)
+    calls = gate.model_call_findings(str(project), config)
+    if calls:
+        return [("FAIL", "no model calls", "%d model call(s) in calculation code: %s. Calculations are plain, tested code; Jev only in the allowed files." % (
+            len(calls), "; ".join("%s:%d" % (f, n) for f, n, _ in calls[:5])))]
+    return [("PASS", "no model calls", "no language model call in the calculation code")]
+
+
 def check_companions(config):
     """Each companion repository exists, is on its own run branch (never a release branch) and is clean."""
     rows = []
@@ -786,6 +801,7 @@ def main():
     rows += check_detective(project, config)
     rows += check_launch_requires(project, config)
     rows += check_companions(config)
+    rows += check_model_calls(project, config)
     rows += branch_rows
     if is_repo:
         rows += check_git_clean(dirty_before, dirty_after, args.allow_dirty)

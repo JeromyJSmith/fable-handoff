@@ -5,8 +5,8 @@
  "operating_rules_section": "OPERATING_RULES_MARPA.md",
  "config": {
   "preset": "marpa",
-  "verify_command": "uv run pytest -q tests && (cd /Volumes/MARPA/apps/marpa-desk && bun run test) && test -f budget_backtest.py && uv run budget_backtest.py --check",
-  "verify_timeout_seconds": 5400,
+  "verify_command": "test -f docs/standard/DEFINITION_OF_DONE.md && uv run pytest -q tests && (cd /Volumes/MARPA/method/allocation && uv run pytest -q) && (cd /Volumes/MARPA/apps/marpa-desk && bun run test) && test -f done_check.py && uv run done_check.py --check",
+  "verify_timeout_seconds": 7200,
   "question_system": {
    "type": "bcf",
    "path": "bcf/fable-questions.bcf"
@@ -113,12 +113,12 @@
    },
    {
     "name": "takeoff from geometry",
-    "looks_at": "the decoded drawing geometry per class and per standard item: polygon areas, path lengths and symbol counts, in the units the budget uses",
-    "returns": "the quantity of each standard item the drawing shows; a paver polygon's area is the paver line's square footage",
+    "looks_at": "the decoded drawing geometry per class: areas, lengths and counts in each category's quantity basis, the denominator of the averages (allocated dollars over compatible quantity)",
+    "returns": "each class's compatible quantity; never a price on its own",
     "strength": "strong",
     "status": "planned",
     "weak_when": "only bounding boxes exist for the class (today's geometry store holds boxes for most objects)",
-    "test": "budget_backtest.py: takeoff times each past project's own rates against its real budget, line by line, within quantity_tolerance",
+    "test": "the averages' slider equations reproduce on fixed inputs; quantities agree with Vectorworks worksheet exports within quantity_tolerance",
     "project_sources": [
      "vwx/out/vwx_geometry.duckdb",
      "vwx/pipeline/s04_transform.py",
@@ -173,16 +173,16 @@
    },
    {
     "name": "back-test",
-    "looks_at": "each past project with a real budget: its budget generated from its drawing (takeoff times its own rates, fees from project settings) against the firm's real budget, line by line, by slot and in total; and, for estimating settings, each project estimated from the others",
-    "returns": "agreement within budget_tolerance, and every gap in plain words",
+    "looks_at": "each past project estimated held out (its own budget never used), from the other projects' allocations through the weighted averages and category shares",
+    "returns": "per-project and per-category held-out error, coverage and bias",
     "strength": "decisive",
     "status": "planned",
-    "test": "budget_backtest.py --check",
+    "test": "done_check.py: held-out total error within 10%",
     "project_sources": [
      "blind_benchmark.py",
      "ndjson/raw/budget_line.ndjson",
      "project_settings.yaml",
-     "vwx/out/vwx_geometry.duckdb"
+     "/Volumes/MARPA/method/allocation/SPEC.md"
     ]
    },
    {
@@ -624,9 +624,12 @@
    ],
    "files": [
     "docs/standard/PRODUCT_GOALS.md",
+    "docs/standard/DEFINITION_OF_DONE.md",
+    "/Volumes/MARPA/method/allocation/AEC-ALLOWANCE-METHOD.md",
+    "/Volumes/MARPA/method/allocation/SPEC.md",
+    "/Volumes/MARPA/method/allocation/DESIGN-TO-COST-SPEC.md",
     "docs/standard/SYSTEM.md",
     "vwx/WORKFLOW.md",
-    "vwx/FORMAT_NOTES.md",
     "vwx/run_vwx.sh",
     "intake.py",
     "docs/standard/ESTIMATING_DESIGN.md",
@@ -634,16 +637,70 @@
    ]
   },
   "budget_tolerance": {
-   "line_quantity": "quantity_tolerance per dimension (area 5%, length 5%, count exact, volume 10%)",
-   "line_total_pct": 10.0,
-   "slot_total_pct": 7.5,
-   "project_total_pct": 5.0,
+   "held_out_total_pct": 10.0,
+   "allocation_unexplained_cents": 0,
+   "allocation_duplicated_money": 0,
    "why": {
-    "line_total_pct": "a line's total is quantity times rate; with the quantity within 5% and the project's own rate, rounding and waste leave up to about 10% on one line",
-    "slot_total_pct": "over and under on lines in one slot partly cancel, so a slot is held tighter than a line",
-    "project_total_pct": "the firm prices to the total; a generated budget more than 5% off the real total would change a bid"
+    "held_out_total_pct": "the owner's target from DEFINITION_OF_DONE; the earlier baseline was 13%",
+    "allocation_unexplained_cents": "the allocation engine conserves every cent; any unexplained cent is a defect",
+    "allocation_duplicated_money": "parent and child totals are not additive; money counted twice is a defect"
    },
-   "status": "proposed by the preparing agent from MARPA's quantity tolerances; the owner confirms or changes them before launch"
+   "status": "taken from the owner's definition of done (2026-11-17); docs/standard/DEFINITION_OF_DONE.md wins where it differs"
+  },
+  "related_locations": [
+   {
+    "path": "/Volumes/MARPA/method/allocation",
+    "role": "read and run",
+    "what": "the working allocation engine: allowances spread top-down onto drawn classes, every cent conserved; its own uv environment and marimo notebooks",
+    "run": [
+     "uv run python -m allocation check",
+     "uv run python -m allocation all",
+     "uv run pytest"
+    ],
+    "writes": "only its own commands write, into its configured outputs; the run never edits its code, guide or adjustments (adjustments.yaml changes follow the owner's rules)"
+   }
+  ],
+  "definition_of_done": {
+   "source": "docs/standard/DEFINITION_OF_DONE.md",
+   "endpoint": "GET /done",
+   "check": "done_check.py --check (reads the same rows as GET /done; exits 0 only when every row meets its target)",
+   "rows": [
+    "drawing intake 100% decoded",
+    "every class placed",
+    "every line in an item",
+    "allocation with 0 unexplained cents and 0 duplicated money",
+    "full dispositions",
+    "benchmarks with cohort and spread",
+    "held-out total error within 10% (earlier baseline 13%)",
+    "sliders matching their equations",
+    "no takeoff-style estimate below the evidence minimum",
+    "Solomon done",
+    "the desk app builds, its budget section works unchanged, brand tokens only, end-to-end walkthrough passes",
+    "0 model calls in calculations",
+    "plain-words questions",
+    "documentation current",
+    "the founder-free walkthrough"
+   ]
+  },
+  "deterministic_code": {
+   "paths": [
+    "calc.py",
+    "budget_*.py",
+    "estimate*.py",
+    "takeoff*.py",
+    "allocation_*.py",
+    "averages*.py",
+    "done_check.py",
+    "/Volumes/MARPA/apps/marpa-desk/src/lib/workbook/**/*.ts",
+    "/Volumes/MARPA/apps/marpa-desk/src/lib/budget/**/*.ts"
+   ],
+   "allowed": [
+    "jev_schema.py",
+    "jev_client.py",
+    "*_jev.py",
+    "**/*.test.ts"
+   ],
+   "why": "every calculation is coded and tested; Jev only for bounded decisions under written schemas"
   }
  }
 }
