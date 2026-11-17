@@ -34,13 +34,28 @@ def marpa_config():
     return json.loads(json.dumps(PRESET["config"]))
 
 
-def layout_like_marpa(project: Path) -> None:
-    """Create one file for every path or glob the preset's functions read."""
+def local_functions():
+    """The preset's functions with every source outside the project moved to outside/<name> inside it.
+
+    Tests never write outside their own tmp_path: an absolute source (the allocation engine's
+    documents) is replaced, never created or overwritten where it is.
+    """
+    out = []
     for f in PRESET["config"]["detective_functions"]:
+        srcs = ["outside/" + Path(s).name if Path(s).is_absolute() else s for s in f["project_sources"]]
+        out.append(dict(f, project_sources=srcs))
+    return out
+
+
+def layout_like_marpa(project: Path) -> None:
+    """Create one file for every path or glob local_functions() reads, all inside `project`."""
+    for f in local_functions():
         for src in f["project_sources"]:
             if src.lower().startswith(detective().EXTERNAL):
                 continue
-            target = project / src.replace("*", "x")
+            assert not Path(src).is_absolute()
+            target = (project / src.replace("*", "x")).resolve()
+            assert target.is_relative_to(project.resolve()), target
             if "." in target.name or target.name.endswith("x"):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text("{}\n")
@@ -119,13 +134,14 @@ def test_the_marpa_registry_passes_where_its_sources_exist_and_fails_where_they_
     assert not any("connector: Gmail" in p or "external: bSDD" in p for p in problems)
     layout = tmp_path / "marpa"
     layout_like_marpa(layout)
-    assert dm.registry_problems(cfg, layout) == []
+    assert dm.registry_problems(dict(cfg, detective_functions=local_functions()), layout) == []
 
 
 def test_readiness_accepts_the_marpa_registry_in_a_marpa_shaped_project(tmp_path):
     project = bare_project(tmp_path)
     assert init(project, "--preset", "marpa").returncode == 0
     layout_like_marpa(project)
+    write_cfg(project, detective_functions=local_functions())
     git(project, "switch", "-qc", "fable/run-1")
     commit_all(project, "MARPA layout")
     _, data = readiness(project)
@@ -440,9 +456,20 @@ def test_readiness_refuses_a_launch_whose_required_functions_or_files_are_missin
     _, data = readiness(project)
     assert "'spatial relationships', which is only planned; build it before launch" in next(r for r in data["rows"] if r["check"] == "launch requires")["detail"]
     # files in place and the planned functions as first tasks: it passes
+    # Only paths inside the test project are ever written. The preset also names files outside it
+    # (the allocation engine's documents); the test points those at copies in tmp_path instead.
+    local = []
     for rel in req["files"]:
-        (project / rel).parent.mkdir(parents=True, exist_ok=True)
-        (project / rel).write_text("x\n")
+        if Path(rel).is_absolute():
+            rel = str(tmp_path / "outside" / Path(rel).name)
+            Path(rel).parent.mkdir(parents=True, exist_ok=True)
+            Path(rel).write_text("x\n")
+            assert Path(rel).resolve().is_relative_to(tmp_path)
+        else:
+            (project / rel).parent.mkdir(parents=True, exist_ok=True)
+            (project / rel).write_text("x\n")
+        local.append(rel)
+    req = dict(req, files=local)
     state = (project / "fable/STATE.md").read_text().replace("## Tasks\n", "## Tasks\n\n- [ ] Build takeoff from geometry\n- [ ] Build spatial relationships\n- [ ] Build back-test against real budgets\n", 1)
     (project / "fable/STATE.md").write_text(state)
     write_cfg(project, launch_requires=req)
