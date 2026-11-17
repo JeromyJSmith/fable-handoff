@@ -380,7 +380,33 @@
     "target": 0.9,
     "min_accepted": 10,
     "rule": "the lowest cutoff at which at least 10 accepted answers are at least 90% right"
-   }
+   },
+   "answer_rules": [
+    {
+     "pattern": "\\b(?:delivery|install(?:ation)?|labou?r|equipment|rental|machine|crane|service|maintenance|material\\s*\\+\\s*install)\\b",
+     "schemas": [
+      "item_merge",
+      "service_item"
+     ],
+     "why": "a component is never part of an item name; delivery, install, equipment, service and maintenance are component digits"
+    },
+    {
+     "pattern": "\\b(?:credit|add option|revision|value engineering|change order|\\bVE\\b)\\b",
+     "schemas": [
+      "item_merge",
+      "service_item"
+     ],
+     "why": "credits, add options, revisions, value engineering and change orders are line flags, never items"
+    },
+    {
+     "pattern": "^\\s*(?:n/?a|none|tbd|placeholder|remaining\\b.*|misc\\.?|other)\\s*$",
+     "schemas": [
+      "item_merge",
+      "service_item"
+     ],
+     "why": "every item has a real name, never n/a or a placeholder"
+    }
+   ]
   },
   "question_triage": {
    "judgment_cues": [
@@ -618,7 +644,8 @@
     "vwx/run_vwx.sh",
     "intake.py",
     "tests/test_audit_stage1.py",
-    "inputs/owner-import-2026-11-16"
+    "inputs/owner-import-2026-11-16",
+    "tests/test_numbering_standard.py"
    ]
   },
   "budget_tolerance": {
@@ -679,7 +706,8 @@
     "the MARPA Standard session's stage 1 audit passes (tests/test_audit_stage1.py)",
     "0 model calls in calculations",
     "plain-words questions",
-    "documentation current"
+    "documentation current",
+    "the numbering standard holds in every slot: tests/test_numbering_standard.py passes (one item per kind of thing; no component in an item name; credits, add options, revisions, value engineering and change orders are line flags; every item has a real name; every line coded with an item and a component)"
    ]
   },
   "deterministic_code": {
@@ -723,6 +751,13 @@
   "unreadable_paths": [
    "runs",
    "runs/**"
+  ],
+  "standards_checks": [
+   {
+    "name": "MARPA numbering standard",
+    "command": "uv run pytest -q tests/test_numbering_standard.py",
+    "why": "the owner's binding numbering standard (2026-11-16): one item per kind of thing in a slot, components and credits never items, real names, every line coded; a slot passes only when all its items pass"
+   }
   ]
  },
  "shapes": {
@@ -745,7 +780,8 @@
       "the MARPA Standard session's stage 1 audit passes (tests/test_audit_stage1.py)",
       "0 model calls in calculations",
       "plain-words questions",
-      "documentation current"
+      "documentation current",
+      "the numbering standard holds in every slot: tests/test_numbering_standard.py passes (one item per kind of thing; no component in an item name; credits, add options, revisions, value engineering and change orders are line flags; every item has a real name; every line coded with an item and a component)"
      ]
     },
     "launch_requires": {
@@ -766,7 +802,8 @@
       "vwx/run_vwx.sh",
       "intake.py",
       "tests/test_audit_stage1.py",
-      "inputs/owner-import-2026-11-16"
+      "inputs/owner-import-2026-11-16",
+      "tests/test_numbering_standard.py"
      ]
     }
    },

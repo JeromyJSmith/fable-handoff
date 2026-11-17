@@ -10,6 +10,15 @@ Building the product:
 - The allocation engine in /Volumes/MARPA/method/allocation is read and run through its own commands only; never edit its code, guide or adjustments.
 - No language model call in any calculation. Jev only for bounded decisions under a written schema, in the files deterministic_code allows.
 
+The numbering standard (binding):
+
+- One item per kind of thing in a slot; stone type, size, place and maker are its spec.
+- A component is never part of an item name; it is a component digit on the item it serves.
+- Credits, add options, revisions, value engineering and change orders are line flags, never items.
+- Every item has a real name, never "n/a" or a placeholder.
+- Every line is coded with an item and a component.
+- A detective case or an adjudication never creates an item that breaks these rules: the adjudication policy refuses such an answer, and the numbering tests must pass before the run may stop.
+
 Keeping the standard (the owner's rules in CLAUDE.md):
 
 - Take the writer lock before any write to the working database: set MARPA_AGENT to this run's branch name and run writer_lock.py take. If another agent holds it, park the task and continue with work that does not write the database. Release it when you stop writing.

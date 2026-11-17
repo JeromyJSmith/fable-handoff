@@ -19,6 +19,17 @@ Where this mission and those documents differ, the documents win; record the dif
 
 Each stage is its own run. A stage launches only after the one before has written fable/done/stage<n>.json. The desk app waits until stage 1 is through (no decision about it before then).
 
+### The numbering standard (binding; the owner's decision of 2026-11-16)
+
+Every budget line has one code: slot, item, component and role. The run keeps six rules, and tests enforce them:
+
+1. **One item per kind of thing in a slot.** The stone type, size, place and maker are the item's spec, never separate items. "Boulder", "granite boulders" and "moss rock boulders" are one item, boulder.
+2. **A component is never part of an item name.** Delivery, install, equipment, service and maintenance are component digits on the item they serve.
+3. **Credits, add options, revisions, value engineering and change orders are flags on a line,** never items.
+4. **Every item has a real name,** never "n/a" or a placeholder.
+5. **Every line is coded** with an item and a component.
+6. **Tests enforce these** in every slot (tests/test_numbering_standard.py). A slot passes only when all its items pass, and the run cannot stop until they pass.
+
 ### Three places
 
 | Place | Role | How the run uses it |

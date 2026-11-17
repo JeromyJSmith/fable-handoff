@@ -111,7 +111,7 @@ def test_the_preset_verify_command_is_used_when_none_is_given(tmp_path):
     assert "bun run test" not in cfg["verify_command"]
     assert cfg["verify_timeout_seconds"] == 7200
     done = cfg["definition_of_done"]
-    assert done["source"] == "docs/standard/DEFINITION_OF_DONE.md" and done["endpoint"] == "GET /done" and len(done["rows"]) == 10
+    assert done["source"] == "docs/standard/DEFINITION_OF_DONE.md" and done["endpoint"] == "GET /done" and len(done["rows"]) == 11
     assert any("owner-import-2026-11-16" in r for r in done["rows"]) and any("153 uncoded lines" in r for r in done["rows"])
     assert cfg["budget_tolerance"]["held_out_total_pct"] is None and cfg["budget_tolerance"]["evidence_minimum_projects"] is None
     assert cfg["budget_tolerance"]["allocation_unexplained_cents"] == 0
@@ -827,3 +827,42 @@ def test_the_guard_blocks_reading_run_output_and_allows_everything_else(tmp_path
     ]
     for proc in allowed:
         assert proc.returncode == 0, proc.stderr
+
+
+# --------------------------------------------------------------------------- the numbering standard (owner, 2026-11-16)
+
+def test_the_numbering_standard_gates_stage_one_and_is_stated_in_plain_words(tmp_path):
+    project = bare_project(tmp_path)
+    assert init(project, "--preset", "marpa", "--shape", "stage1").returncode == 0
+    cfg = read_cfg(project)
+    assert cfg["standards_checks"] == [PRESET["config"]["standards_checks"][0]]
+    assert cfg["standards_checks"][0]["command"] == "uv run pytest -q tests/test_numbering_standard.py"
+    assert "tests/test_numbering_standard.py" in cfg["launch_requires"]["files"]
+    assert any(r.startswith("the numbering standard holds in every slot") for r in cfg["definition_of_done"]["rows"])
+    mission = (project / "fable/MISSION.md").read_text()
+    rules = (project / "fable/OPERATING_RULES.md").read_text()
+    for words in ["One item per kind of thing in a slot", "A component is never part of an item name",
+                  "are flags on a line,", "Every item has a real name,", "Every line is coded", "Tests enforce these"]:
+        assert words in mission, words
+    assert "never creates an item that breaks these rules" in rules
+
+
+@pytest.mark.parametrize("answer,schema,breaks", [
+    ("Boulders Delivery", "item_merge", True),
+    ("Boulders. Material + Install", "service_item", True),
+    ("Boulders west field credit", "item_merge", True),
+    ("n/a", "service_item", True),
+    ("Delivery", "cost_component", False),
+    ("Boulder", "item_merge", False),
+    ("13.0 ADD OPTIONS", "class_slot", False),
+    ("2.0 GENERAL JOB ITEMS / SITE PREP", "line_slot", False),
+])
+def test_adjudication_never_creates_an_item_that_breaks_the_numbering_standard(tmp_path, answer, schema, breaks):
+    dm, cfg = detective(), marpa_config()
+    case = jev_case(answer=answer, schema=schema, offered=SLOTS + [answer], post_checks={c: True for c in cfg["adjudication_policy"]["schemas"][schema]["post_checks"]},
+                    companions={})
+    case["candidates"] = SLOTS + [answer]
+    case["evidence"][0]["supports"] = answer
+    case["evidence"][1]["supports"] = answer
+    result = dm.verdict(case, cfg, tmp_path)
+    assert ("breaks a rule of the standard" in result["why"]) is breaks, result["why"]
