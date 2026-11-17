@@ -1,3 +1,12 @@
-### This run is stage 1 of 2: the preflight
+### This run is stage 1 of 3: the data
 
-Do the work items 1 to 5 above: intake into the allocation engine, the allowances, the averages and sliders, the held-out estimates and Solomon's first estimate. Do not change the desk app; stage 2 does that. Done is `done_check.py --check --stage 1` on the stage 1 rows of `definition_of_done`; when it passes it writes runs/done/stage1.json with the commit, which stage 2 requires before it launches. Record in HANDOFF.md what the desk will need: the budget's shape, the API calls and the analysis views.
+Load every past project that has a budget, with its own budget as the truth, through JSON and jq, until everything needed to allocate and estimate is in. Do not estimate anything. The MARPA Standard session's stage 1 audit (tests/test_audit_stage1.py and its definition of done) is the measure:
+
+- every budget file loaded, including inputs/owner-import-2026-11-16 and Mallett's drawing;
+- the component digit kept in every code: a component is never an item of its own;
+- the 153 uncoded lines worked out: each has a slot, item and component, or an open case with what would settle it;
+- the line_measure and item_measure tables built;
+- the finance formula check done;
+- every budgeted project's .vwx decoded with the repository's own vwx/run_vwx.sh.
+
+Done is `done_check.py --check --stage 1`; when it passes it writes fable/done/stage1.json with the commit, which stage 2 requires before it launches.

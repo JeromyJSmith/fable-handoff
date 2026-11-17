@@ -10,14 +10,13 @@ Read fable/MISSION.md and the documents it names first, then confirm or extend t
 
 ## Tasks
 
-- [ ] Build takeoff from geometry: compatible quantities per class from the decoded polygons and paths, with tests
-- [ ] Build spatial relationships: nearness and containment as evidence for placement, with tests
-- [ ] Drawing intake hands every decoded, placed class to the allocation engine (intake 100% decoded, every class placed)
-- [ ] Allowances from project settings spread top-down: 0 unexplained cents, 0 duplicated money, full dispositions
-- [ ] Weighted averages and sliders match their equations, with benchmarks showing cohort and spread
-- [ ] Build the back-test: every past project estimated held out, total error within the target
-- [ ] Solomon's first estimate with a source for every number and unknowns unpriced
-- [ ] Write done_check.py with --stage 1; on success it writes runs/done/stage1.json
+- [ ] Every budget file loaded, including inputs/owner-import-2026-11-16 and Mallett's drawing, each line accounted for
+- [ ] The component digit kept in every code; no item named only by a component word
+- [ ] The 153 uncoded lines worked out: slot, item and component, or an open case with what would settle it
+- [ ] The line_measure and item_measure tables built, with their unit rules tested
+- [ ] The finance formula check done for every workbook
+- [ ] Every budgeted project's .vwx decoded with vwx/run_vwx.sh
+- [ ] Write done_check.py with --stage 1; on success it writes fable/done/stage1.json
 - [ ] Full verify command passes and fable/REPORT.md is written
 
 ## Notes for a resuming session

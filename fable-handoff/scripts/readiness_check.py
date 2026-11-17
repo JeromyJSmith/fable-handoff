@@ -467,11 +467,16 @@ def check_owner_decisions(project, config):
         records = json.loads(path.read_text(encoding="utf-8")).get("open_questions", [])
     except (OSError, ValueError, AttributeError):
         return [("FAIL", "owner decisions", "%s cannot be read" % rel)]
-    waiting = [q.get("topic") or q.get("question") for q in records if q.get("status", "open") == "open"]
+    shape = config.get("shape")
+    # A decision may name the shapes that need it ("needed_for"); other shapes launch without it.
+    needed = [q for q in records if not q.get("needed_for") or shape in q["needed_for"]]
+    waiting = [q.get("topic") or q.get("question") for q in needed if q.get("status", "open") == "open"]
+    later = [q.get("topic") for q in records if q not in needed and q.get("status", "open") == "open"]
     if waiting:
         return [("FAIL", "owner decisions", "%d decision(s) wait on the owner: %s. Ask them in one sitting: uv run --script <skill>/scripts/decision_interview.py --project . --file %s" % (
             len(waiting), "; ".join(waiting), rel))]
-    return [("PASS", "owner decisions", "%d answered" % len(records))]
+    return [("PASS", "owner decisions", "%d answered%s" % (len(needed) - len(waiting) if needed else 0,
+            "; waiting for a later shape: %s" % "; ".join(later) if later else ""))]
 
 
 def check_companions(config):

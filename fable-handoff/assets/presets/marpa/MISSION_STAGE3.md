@@ -1,0 +1,3 @@
+### This run is stage 3 of 3: the benchmark
+
+Stage 2 is done (fable/done/stage2.json). Rerun every budgeted project as the benchmark, each held out: its own budget is never used to estimate it. Ulm and Solomon are the two use cases. Ulm is estimated the way Solomon will be, with its own budget and its actual cost to complete held out as the answer through calc.held_out and calc.ANSWER_ONLY. Solomon gets its first estimate with a source for every number and every unknown left unpriced. Report held-out error per category and in total, with coverage and bias. The owner sets the held-out target and the evidence minimum from these results. Build the back-test first. Done is `done_check.py --check --stage 3`.

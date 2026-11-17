@@ -26,46 +26,43 @@ HERE = Path(__file__).resolve().parent
 TEMPLATE = HERE.parent.parent / "templates" / "MISSION.md"
 
 JOB = {
-    "single": "Build the MARPA preflight and the slimmed desk app in one run. A drawing dropped in the desk app is decoded, its classes placed, the project's allowances spread onto its drawn classes through the allocation engine with every cent conserved, the weighted averages and sliders kept from past projects, every past project estimated held out, Solomon's first estimate made with a source for every number, and a budget in the standard's form handed to the desk's budget section, which keeps its bids, subcontractors and administration markup unchanged.",
-    "stage1": "Build the MARPA preflight, stage 1 of 2. A drawing is decoded, its classes placed, the project's allowances spread onto its drawn classes through the allocation engine with every cent conserved, the weighted averages and sliders kept from past projects, every past project estimated held out, and Solomon's first estimate made with a source for every number and every unknown left unpriced. The desk app is not changed in this stage.",
-    "stage2": "Build the slimmed MARPA desk app, stage 2 of 2, on the preflight stage 1 built. Cut the desk by its map's work order to the budget features, Docs, Standards and the MARPA Standard tab, feed its budget section the preflight's budget in the standard's form without changing how bids, subcontractors and the administration markup work, and add the analysis views and the guided tour for someone new.",
+    "stage1": "Load the data for the MARPA standard, stage 1 of 3. Every past project that has a budget is loaded with its own budget as the truth, through the JSON and jq processes, until everything needed to allocate and estimate is in: every budget file, every line coded with its item and component, the measurement tables built, the finance formulas checked and every budgeted drawing decoded. Nothing is estimated in this stage.",
+    "stage2": "Compute the MARPA weighted averages, stage 2 of 3, on the data stage 1 loaded. Each project's allowances are spread top-down onto its drawn classes through the allocation engine with every cent conserved, takeoff from geometry gives the compatible quantities, and the weighted average cost per class unit, the category shares and the benchmarks with cohort and spread are computed and tested against their equations. Nothing is estimated for a project yet.",
+    "stage3": "Benchmark the MARPA estimating, stage 3 of 3. Every budgeted project is rerun with its own budget held out and estimated from the others through the stage 2 averages, Ulm is estimated the way Solomon will be with its own budget and cost to complete held back as the answer, Solomon gets its first estimate with a source for every number, and the held-out error is reported per category and in total for the owner to set the targets.",
 }
 WHY = ("MARPA must run without its founder: anyone at the firm should turn a drawing into a priced, editable budget the same way the founder would. "
-       "Correct, conserved money and plain, tested calculations come before speed or new features.")
+       "The data comes first and is the truth; correct, conserved money and plain, tested calculations come before speed or new features.")
 TASKS = {
-    "single": ["Build takeoff from geometry: compatible quantities per class from the decoded polygons and paths, with tests",
-               "Build spatial relationships: nearness and containment as evidence for placement, with tests",
-               "Drawing intake hands every decoded, placed class to the allocation engine (intake 100% decoded, every class placed)",
-               "Allowances from project settings spread top-down: 0 unexplained cents, 0 duplicated money, full dispositions",
-               "Weighted averages and sliders match their equations, with benchmarks showing cohort and spread",
-               "Build the back-test: every past project estimated held out, total error within the target",
-               "Solomon's first estimate with a source for every number and unknowns unpriced",
-               "Write done_check.py, reading the same rows as GET /done",
-               "Cut the desk by its map's work order; its budget section works unchanged; brand tokens only",
-               "Feed the desk's budget section the preflight's budget and add the analysis views",
+    "stage1": ["Every budget file loaded, including inputs/owner-import-2026-11-16 and Mallett's drawing, each line accounted for",
+               "The component digit kept in every code; no item named only by a component word",
+               "The 153 uncoded lines worked out: slot, item and component, or an open case with what would settle it",
+               "The line_measure and item_measure tables built, with their unit rules tested",
+               "The finance formula check done for every workbook",
+               "Every budgeted project's .vwx decoded with vwx/run_vwx.sh",
+               "Write done_check.py with --stage 1; on success it writes fable/done/stage1.json",
                "Full verify command passes and fable/REPORT.md is written"],
-    "stage1": ["Build takeoff from geometry: compatible quantities per class from the decoded polygons and paths, with tests",
-               "Build spatial relationships: nearness and containment as evidence for placement, with tests",
-               "Drawing intake hands every decoded, placed class to the allocation engine (intake 100% decoded, every class placed)",
-               "Allowances from project settings spread top-down: 0 unexplained cents, 0 duplicated money, full dispositions",
-               "Weighted averages and sliders match their equations, with benchmarks showing cohort and spread",
-               "Build the back-test: every past project estimated held out, total error within the target",
-               "Solomon's first estimate with a source for every number and unknowns unpriced",
-               "Write done_check.py with --stage 1; on success it writes runs/done/stage1.json",
+    "stage2": ["Build takeoff from geometry: compatible quantities per class from the decoded polygons and paths, with tests",
+               "Allowances spread top-down through the allocation engine: 0 unexplained cents, 0 duplicated money",
+               "Weighted averages and sliders match their equations, with tests on fixed inputs",
+               "Category shares where the evidence is short; lump sums and fees counted once",
+               "Benchmarks with cohort and spread for every class unit",
+               "Extend done_check.py with --stage 2; on success it writes fable/done/stage2.json",
                "Full verify command passes and fable/REPORT.md is written"],
-    "stage2": ["Cut the desk by its map's work order, one step at a time, with the desk's tests after each",
-               "The desk's budget section works unchanged: bids, attaching subcontractors, the administration markup",
-               "Feed the budget section the stage 1 budget in the standard's form through the Standards API",
-               "Analysis views: plan by slot or class, allowance flow summing to the ledger, allocated dollars and quantities by item, intake match, cross-project comparison with slider weights",
-               "Extend done_check.py with --stage 2",
+    "stage3": ["Build the back-test: every budgeted project rerun held out through calc.held_out",
+               "Ulm estimated like Solomon, its answer held out by calc.ANSWER_ONLY, compared with its budget and cost to complete",
+               "Solomon's first estimate with a source for every number and unknowns unpriced",
+               "Held-out error per category and in total, with coverage and bias, written for the owner",
+               "Extend done_check.py with --stage 3",
                "Full verify command passes and fable/REPORT.md is written"],
 }
 DECISIONS_BEFORE = [
+    "Three data-first stages: the data, the weighted averages, the benchmark; each its own run. Reason: the owner's decision of 2026-11-16; nothing is estimated before the data is in.",
     "Allowances first: each category allowance from the project settings is spread top-down onto that category's drawn classes. Reason: this is how MARPA budgets (the allocation method).",
     "The allocation engine is read and run through its own commands; the run integrates with it and does not rebuild it. Reason: it already conserves every dollar on six projects.",
     "Every calculation is plain code with tests; Jev answers only bounded decisions under the written schemas. Reason: the owner's rule for deterministic calculations.",
     "A project's own budget is never used to estimate it. Reason: held-out validation.",
-    "The desk's budget section is fed, not duplicated. Reason: bids, subcontractors and the administration markup are the firm's working tools and main income.",
+    "The desk app is left alone until stage 1 is through. Reason: the owner's decision of 2026-11-16.",
+    "Quantity tolerances stay as they are: area and length 5 percent, counts exact, volume 10 percent, weight never compared. Reason: the owner's decision of 2026-11-16.",
     "The answers in fable/owner_decisions.json, once given, are the owner's decisions for this run.",
 ]
 
@@ -78,8 +75,7 @@ def section(text: str, title: str, body: str) -> str:
 
 def mission(shape: str, config: dict) -> str:
     text = TEMPLATE.read_text(encoding="utf-8")
-    text = text.replace(text.splitlines()[0], "# Mission: MARPA, %s" % {"single": "drawing to priced budget in one run",
-                                                                     "stage1": "the preflight (stage 1 of 2)", "stage2": "the slimmed desk app (stage 2 of 2)"}[shape], 1)
+    text = text.replace(text.splitlines()[0], "# Mission: MARPA, %s" % {"stage1": "the data (stage 1 of 3)", "stage2": "the weighted averages (stage 2 of 3)", "stage3": "the benchmark (stage 3 of 3)"}[shape], 1)
     text = re.sub(r"<!--.*?-->\n*", "", text, count=1, flags=re.S)
     text = section(text, "Job", JOB[shape])
     text = section(text, "Why", WHY)
@@ -91,9 +87,10 @@ def mission(shape: str, config: dict) -> str:
     forbidden = ["Do not edit the allocation engine's code, guide or adjustments, because it is the firm's working system",
                  "Do not push, and do not touch main, because the owner merges",
                  "Do not send client mail or touch the desk's Pixeltable home, because both reach outside this run"]
-    out_of_scope = ["Restyling the desk beyond the cut and the new views", "New standard entries from old drawings beyond what the budget needs"]
+    out_of_scope = ["New standard entries from old drawings beyond what the budget needs"]
+    out_of_scope.insert(0, "Any change to the desk app (deferred until the owner decides after stage 1)")
     if config.get("shape") == "stage1":
-        out_of_scope.insert(0, "Any change to the desk app (stage 2)")
+        out_of_scope.insert(1, "Estimating anything (stages 2 and 3)")
     guard = ("Allowed without asking:\n\n" + "\n".join("- " + a for a in allowed) + "\n\nNot allowed:\n\n" + "\n".join("- " + f for f in forbidden) +
              "\n\nOut of scope, leave these alone even though nothing blocks them:\n\n" + "\n".join("- " + o for o in out_of_scope))
     text = section(text, "Guardrails", guard)
@@ -122,8 +119,6 @@ def render(preset: dict) -> dict[str, str]:
     for shape, spec in (preset.get("shapes") or {}).items():
         config = dict(preset["config"], **(spec.get("config") or {}), shape=shape)
         config.setdefault("branch", "fable/run-1")
-        if shape == "single":
-            config["branch"] = "fable/run-1"
         out["shapes/%s/MISSION.md" % shape] = mission(shape, config)
         out["shapes/%s/STATE.md" % shape] = state(shape)
         out["shapes/%s/DECISIONS.md" % shape] = decisions()

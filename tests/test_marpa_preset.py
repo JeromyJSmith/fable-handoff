@@ -93,7 +93,10 @@ def test_init_with_the_marpa_preset_writes_marpas_configuration(tmp_path):
     mission = (project / "fable/MISSION.md").read_text()
     assert mission.index("## MARPA") < mission.index("\n## Done") and "Class-word grammar" in (project / "fable/OPERATING_RULES.md").read_text()
     # the owner's product direction: takeoff, the back-test against real budgets, Solomon, intake to budget, two repositories
-    for words in ["marpa_solomon_2605", "Allowances, spread top-down", "Held-out estimates", "DEFINITION_OF_DONE.md", "budgetLoad.ts", "AEC-ALLOWANCE-METHOD.md", "s01_decode", "Passing tests alone is not done"]:
+    # the owner's three data-first stages (2026-11-16); init with no shape gives stage 1
+    assert cfg["shape"] == "stage1" and "companion_repositories" not in cfg or cfg["companion_repositories"] == []
+    for words in ["Three stages, data first", "stage 1 of 3", "owner-import-2026-11-16", "Do not estimate anything", "DEFINITION_OF_DONE.md",
+                  "AEC-ALLOWANCE-METHOD.md", "s01_decode", "### Run output", "The desk app waits until stage 1 is through"]:
         assert words in mission, words
     rules = (project / "fable/OPERATING_RULES.md").read_text()
     assert rules.rstrip().endswith("Never a bare decision number.") and "writer_lock.py take" in rules
@@ -104,13 +107,14 @@ def test_the_preset_verify_command_is_used_when_none_is_given(tmp_path):
     proc = run([*script("init_handoff.py"), "--project", str(project), "--preset", "marpa", "--apply-settings"])
     assert proc.returncode == 0, proc.stderr
     cfg = read_cfg(project)
-    assert cfg["verify_command"].startswith("test -f docs/standard/DEFINITION_OF_DONE.md && uv run pytest -q tests")
-    assert "(cd /Volumes/MARPA/method/allocation && UV_PROJECT_ENVIRONMENT=$HOME/worktrees/_env/marpa-allocation uv run --no-sync pytest -q)" in cfg["verify_command"]
-    assert "bun run test" in cfg["verify_command"] and cfg["verify_command"].endswith("test -f done_check.py && uv run done_check.py --check")
+    assert cfg["verify_command"] == "uv run pytest -q tests && test -f done_check.py && uv run done_check.py --check --stage 1"
+    assert "bun run test" not in cfg["verify_command"]
     assert cfg["verify_timeout_seconds"] == 7200
     done = cfg["definition_of_done"]
-    assert done["source"] == "docs/standard/DEFINITION_OF_DONE.md" and done["endpoint"] == "GET /done" and len(done["rows"]) == 15
-    assert cfg["budget_tolerance"]["held_out_total_pct"] == 10.0 and cfg["budget_tolerance"]["allocation_unexplained_cents"] == 0
+    assert done["source"] == "docs/standard/DEFINITION_OF_DONE.md" and done["endpoint"] == "GET /done" and len(done["rows"]) == 10
+    assert any("owner-import-2026-11-16" in r for r in done["rows"]) and any("153 uncoded lines" in r for r in done["rows"])
+    assert cfg["budget_tolerance"]["held_out_total_pct"] is None and cfg["budget_tolerance"]["evidence_minimum_projects"] is None
+    assert cfg["budget_tolerance"]["allocation_unexplained_cents"] == 0
     assert cfg["related_locations"][0]["path"] == "/Volumes/MARPA/method/allocation" and cfg["related_locations"][0]["role"] == "read and run"
 
 
@@ -442,7 +446,7 @@ def test_readiness_refuses_a_launch_whose_required_functions_or_files_are_missin
     from conftest import prepared_project
     project = prepared_project(tmp_path)
     funcs = [dict(f, project_sources=["src/*.py"]) for f in marpa_config()["detective_functions"]]
-    req = marpa_config()["launch_requires"]
+    req = PRESET["shapes"]["stage2"]["config"]["launch_requires"]
     write_cfg(project, detective_functions=funcs, launch_requires=req)
     commit_all(project, "requires")
     _, data = readiness(project)
@@ -636,54 +640,64 @@ def test_readiness_refuses_a_desk_that_has_no_map_for_its_commit(tmp_path):
 
 # --------------------------------------------------------------------------- mission shapes
 
-@pytest.mark.parametrize("shape", ["single", "stage1", "stage2"])
+@pytest.mark.parametrize("shape", ["stage1", "stage2", "stage3"])
 def test_each_mission_shape_has_its_own_done_check(tmp_path, shape):
+    # the owner's three data-first stages (2026-11-16): the data, the weighted averages, the benchmark
     project = bare_project(tmp_path)
     proc = run([*script("init_handoff.py"), "--project", str(project), "--preset", "marpa", "--shape", shape, "--apply-settings"])
     assert proc.returncode == 0, proc.stderr
     cfg = read_cfg(project)
     mission = (project / "fable/MISSION.md").read_text()
-    assert cfg["shape"] == shape
-    if shape == "single":
-        assert cfg["branch"] == "fable/run-1" and len(cfg["definition_of_done"]["rows"]) == 15 and "stage" not in cfg["verify_command"]
-        assert cfg["companion_repositories"] and "stage 1 of 2" not in mission
-    if shape == "stage1":
-        assert cfg["branch"] == "fable/marpa-stage1" and cfg["companion_repositories"] == []
-        assert cfg["verify_command"].endswith("done_check.py --check --stage 1") and "bun run test" not in cfg["verify_command"]
-        assert not any(r.startswith("the desk app") for r in cfg["definition_of_done"]["rows"]) and "stage 1 of 2" in mission
-    if shape == "stage2":
-        assert cfg["branch"] == "fable/marpa-stage2" and cfg["verify_command"].endswith("done_check.py --check --stage 2")
-        assert "bun run test" in cfg["verify_command"] and "runs/done/stage1.json" in cfg["launch_requires"]["files"]
-        assert {"takeoff from geometry", "back-test"} <= set(cfg["launch_requires"]["functions_built"]) and "stage 2 of 2" in mission
+    n = int(shape[-1])
+    assert cfg["shape"] == shape and cfg["branch"] == "fable/marpa-stage%d" % n
+    assert cfg["verify_command"].endswith("done_check.py --check --stage %d" % n) and "bun run test" not in cfg["verify_command"]
+    assert cfg.get("companion_repositories", []) == [] and "stage %d of 3" % n in mission
+    if n == 1:
+        assert "allocation" not in cfg["verify_command"] and "Do not estimate anything" in mission
+        assert "tests/test_audit_stage1.py" in cfg["launch_requires"]["files"]
+    else:
+        assert "fable/done/stage%d.json" % (n - 1) in cfg["launch_requires"]["files"] and "allocation" in cfg["verify_command"]
+    if n == 2:
+        assert cfg["launch_requires"]["functions_first_tasks"] == ["takeoff from geometry"]
+    if n == 3:
+        assert "takeoff from geometry" in cfg["launch_requires"]["functions_built"] and cfg["launch_requires"]["functions_first_tasks"] == ["back-test"]
+        assert "calc.held_out" in mission and "Ulm" in mission
 
 
 def test_an_unknown_shape_is_refused(tmp_path):
     project = bare_project(tmp_path)
-    proc = init(project, "--preset", "marpa", "--shape", "stage3")
-    assert proc.returncode != 0 and "no mission shape 'stage3'" in proc.stderr and "stage1" in proc.stderr
+    proc = init(project, "--preset", "marpa", "--shape", "single")
+    assert proc.returncode != 0 and "no mission shape 'single'" in proc.stderr and "stage1" in proc.stderr
     assert init(project, "--shape", "stage1").returncode != 0
 
 
 # --------------------------------------------------------------------------- the owner's decision packet
 
-def test_the_owner_decision_packet_is_ready_to_ask_and_holds_the_launch_until_answered(tmp_path):
+def test_the_owner_decision_packet_holds_only_the_stage_that_needs_it(tmp_path):
+    # the owner answered four decisions on 2026-11-16; the held-out target and the evidence minimum wait for stage 3
     project = bare_project(tmp_path)
-    assert init(project, "--preset", "marpa").returncode == 0
+    assert init(project, "--preset", "marpa", "--shape", "stage3").returncode == 0
     packet = json.loads((project / "fable/owner_decisions.json").read_text())["open_questions"]
-    assert [q["topic"] for q in packet] == ["Restore the three allocation method documents", "One run or two staged runs",
-                                           "Where the desk run starts", "The held-out estimate target",
-                                           "The evidence needed for a per-unit estimate", "Quantity tolerances"]
+    status = {q["topic"]: (q.get("status", "open"), q.get("needed_for")) for q in packet}
+    assert status["One run or two staged runs"][0] == "imported" and status["Quantity tolerances"][0] == "imported"
+    assert status["The held-out estimate target"] == ("open", ["stage3"]) and status["The evidence needed for a per-unit estimate"] == ("open", ["stage3"])
     check = run([*script("decision_interview.py"), "--project", str(project), "--file", "fable/owner_decisions.json", "--check"])
-    assert check.returncode == 0 and "6 open decision(s), 6 ready to ask" in check.stdout, check.stdout + check.stderr
-    git(project, "switch", "-qc", "fable/run-1")
+    assert check.returncode == 0 and "2 open decision(s), 2 ready to ask" in check.stdout, check.stdout + check.stderr
+    git(project, "switch", "-qc", "fable/marpa-stage3")
     commit_all(project, "package")
     _, data = readiness(project)
     row = next(r for r in data["rows"] if r["check"] == "owner decisions")
-    assert row["status"] == "FAIL" and "6 decision(s) wait on the owner" in row["detail"] and "One run or two staged runs" in row["detail"]
-    answers = {q["question"]: {"choice": q["recommendation"], "reason": "test"} for q in packet}
+    assert row["status"] == "FAIL" and "2 decision(s) wait on the owner" in row["detail"] and "The held-out estimate target" in row["detail"]
+    write_cfg(project, shape="stage1")
+    commit_all(project, "as stage 1")
+    _, data = readiness(project)
+    row = next(r for r in data["rows"] if r["check"] == "owner decisions")
+    assert row["status"] == "PASS" and "waiting for a later shape" in row["detail"]
+    answers = {q["question"]: {"choice": q["recommendation"], "reason": "test"} for q in packet if q.get("status", "open") == "open"}
     (tmp_path / "answers.json").write_text(json.dumps(answers))
     proc = run([*script("decision_interview.py"), "--project", str(project), "--file", "fable/owner_decisions.json", "--answers", str(tmp_path / "answers.json")])
     assert proc.returncode == 0, proc.stderr
+    write_cfg(project, shape="stage3")
     commit_all(project, "answered")
     _, data = readiness(project)
     assert statuses(data)["owner decisions"] == "PASS"
@@ -706,12 +720,12 @@ def test_the_outside_write_guard_watches_the_allocation_documents_and_sees_a_cha
 def test_the_shape_files_are_current_and_complete():
     proc = run([*UV_SCRIPT, str(PRESET_DIR / "build_shape_files.py"), "--check"])
     assert proc.returncode == 0, "run build_shape_files.py after changing preset.json: " + proc.stdout
-    for shape in ("single", "stage1", "stage2"):
+    for shape in ("stage1", "stage2", "stage3"):
         for name in ("MISSION.md", "STATE.md", "DECISIONS.md"):
             assert "{{FILL" not in (PRESET_DIR / "shapes" / shape / name).read_text(), (shape, name)
 
 
-@pytest.mark.parametrize("shape", ["single", "stage1", "stage2"])
+@pytest.mark.parametrize("shape", ["stage1", "stage2", "stage3"])
 def test_a_shape_is_ready_except_for_the_owners_answers_and_outside_facts(tmp_path, shape):
     project = bare_project(tmp_path)
     proc = run([*script("init_handoff.py"), "--project", str(project), "--preset", "marpa", "--shape", shape, "--apply-settings", "--max-budget-usd", "200"])
@@ -724,7 +738,8 @@ def test_a_shape_is_ready_except_for_the_owners_answers_and_outside_facts(tmp_pa
     st = statuses(data)
     for check in ("mission", "ledger", "decisions", "detective functions", "no model calls"):
         assert st[check] == "PASS", (check, next(r for r in data["rows"] if r["check"] == check))
-    assert st["owner decisions"] == "FAIL"
+    # stages 1 and 2 need no owner answer now; stage 3 waits for the held-out target and the evidence minimum
+    assert st["owner decisions"] == ("FAIL" if shape == "stage3" else "PASS")
 
 
 # --------------------------------------------------------------------------- intent: data lost or regressed

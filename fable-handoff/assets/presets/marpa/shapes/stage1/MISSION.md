@@ -1,12 +1,12 @@
-# Mission: MARPA, the preflight (stage 1 of 2)
+# Mission: MARPA, the data (stage 1 of 3)
 
 ## Job
 
-Build the MARPA preflight, stage 1 of 2. A drawing is decoded, its classes placed, the project's allowances spread onto its drawn classes through the allocation engine with every cent conserved, the weighted averages and sliders kept from past projects, every past project estimated held out, and Solomon's first estimate made with a source for every number and every unknown left unpriced. The desk app is not changed in this stage.
+Load the data for the MARPA standard, stage 1 of 3. Every past project that has a budget is loaded with its own budget as the truth, through the JSON and jq processes, until everything needed to allocate and estimate is in: every budget file, every line coded with its item and component, the measurement tables built, the finance formulas checked and every budgeted drawing decoded. Nothing is estimated in this stage.
 
 ## Why
 
-MARPA must run without its founder: anyone at the firm should turn a drawing into a priced, editable budget the same way the founder would. Correct, conserved money and plain, tested calculations come before speed or new features.
+MARPA must run without its founder: anyone at the firm should turn a drawing into a priced, editable budget the same way the founder would. The data comes first and is the truth; correct, conserved money and plain, tested calculations come before speed or new features.
 
 ## Where things are
 
@@ -28,8 +28,8 @@ Not allowed:
 
 Out of scope, leave these alone even though nothing blocks them:
 
-- Any change to the desk app (stage 2)
-- Restyling the desk beyond the cut and the new views
+- Any change to the desk app (deferred until the owner decides after stage 1)
+- Estimating anything (stages 2 and 3)
 - New standard entries from old drawings beyond what the budget needs
 
 ## Decisions
@@ -43,7 +43,7 @@ Nobody can answer questions during this run. Decisions made in advance are in fa
 The run is finished when all of these are true:
 
 - Every task in fable/STATE.md is checked off.
-- `test -f docs/standard/DEFINITION_OF_DONE.md && uv run pytest -q tests && (cd /Volumes/MARPA/method/allocation && UV_PROJECT_ENVIRONMENT=$HOME/worktrees/_env/marpa-allocation uv run --no-sync pytest -q) && test -f done_check.py && uv run done_check.py --check --stage 1` exits 0.
+- `uv run pytest -q tests && test -f done_check.py && uv run done_check.py --check --stage 1` exits 0.
 - Every row of the definition of done for this shape meets its target (listed in the MARPA section).
 - fable/REPORT.md is written.
 

@@ -1,3 +1,3 @@
-### This run is stage 2 of 2: the slimmed desk app
+### This run is stage 2 of 3: the weighted averages
 
-Stage 1 is done (runs/done/stage1.json). Do work items 6 to 8 above: cut the desk by its map's work order, keep the budget section working unchanged, feed it the stage 1 budget, build the analysis views, and the guided tour at the end. Change the preflight only to fix what the desk exposes, with a test. Done is `done_check.py --check --stage 2` on the stage 2 rows of `definition_of_done`.
+Stage 1 is done (fable/done/stage1.json). Compute the weighted averages over all budgeted projects through the allocation engine: each allowance spread top-down onto its drawn classes with every cent conserved; rate = Σ w·A ÷ Σ w·Q over compatible quantities; recency weight e^(−λ·age) and similarity weights for terrain, scope and size, each matching its equation in a test; category shares where the evidence is short; lump sums and fees counted once; benchmarks with cohort and spread. Build takeoff from geometry first: it gives the compatible quantities. Nothing is estimated for a project yet. Done is `done_check.py --check --stage 2`, which writes fable/done/stage2.json.

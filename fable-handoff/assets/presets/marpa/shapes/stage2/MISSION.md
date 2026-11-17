@@ -1,12 +1,12 @@
-# Mission: MARPA, the slimmed desk app (stage 2 of 2)
+# Mission: MARPA, the weighted averages (stage 2 of 3)
 
 ## Job
 
-Build the slimmed MARPA desk app, stage 2 of 2, on the preflight stage 1 built. Cut the desk by its map's work order to the budget features, Docs, Standards and the MARPA Standard tab, feed its budget section the preflight's budget in the standard's form without changing how bids, subcontractors and the administration markup work, and add the analysis views and the guided tour for someone new.
+Compute the MARPA weighted averages, stage 2 of 3, on the data stage 1 loaded. Each project's allowances are spread top-down onto its drawn classes through the allocation engine with every cent conserved, takeoff from geometry gives the compatible quantities, and the weighted average cost per class unit, the category shares and the benchmarks with cohort and spread are computed and tested against their equations. Nothing is estimated for a project yet.
 
 ## Why
 
-MARPA must run without its founder: anyone at the firm should turn a drawing into a priced, editable budget the same way the founder would. Correct, conserved money and plain, tested calculations come before speed or new features.
+MARPA must run without its founder: anyone at the firm should turn a drawing into a priced, editable budget the same way the founder would. The data comes first and is the truth; correct, conserved money and plain, tested calculations come before speed or new features.
 
 ## Where things are
 
@@ -17,7 +17,6 @@ The MARPA section below names every place. Build and test commands are in the Do
 Allowed without asking:
 
 - Commit to the branch fable/marpa-stage2 in this repository
-- Commit to the branch fable/marpa-1 in the desk repository (/Volumes/MARPA/apps/marpa-desk)
 - Run the allocation engine's own commands (read and run only)
 - Install a missing package with uv or bun, pinned exactly
 
@@ -29,7 +28,7 @@ Not allowed:
 
 Out of scope, leave these alone even though nothing blocks them:
 
-- Restyling the desk beyond the cut and the new views
+- Any change to the desk app (deferred until the owner decides after stage 1)
 - New standard entries from old drawings beyond what the budget needs
 
 ## Decisions
@@ -43,7 +42,7 @@ Nobody can answer questions during this run. Decisions made in advance are in fa
 The run is finished when all of these are true:
 
 - Every task in fable/STATE.md is checked off.
-- `test -f docs/standard/DEFINITION_OF_DONE.md && uv run pytest -q tests && (cd /Volumes/MARPA/apps/marpa-desk && bun run test) && test -f done_check.py && uv run done_check.py --check --stage 2` exits 0.
+- `uv run pytest -q tests && (cd /Volumes/MARPA/method/allocation && UV_PROJECT_ENVIRONMENT=$HOME/worktrees/_env/marpa-allocation uv run --no-sync pytest -q) && test -f done_check.py && uv run done_check.py --check --stage 2` exits 0.
 - Every row of the definition of done for this shape meets its target (listed in the MARPA section).
 - fable/REPORT.md is written.
 

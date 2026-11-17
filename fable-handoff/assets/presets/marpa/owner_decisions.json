@@ -61,7 +61,11 @@
     }
    ],
    "kind": "judgment",
-   "nature": "policy"
+   "nature": "policy",
+   "status": "imported",
+   "answer": "Restore all three from git",
+   "answer_reason": "Done: the three documents are back to their committed text (105, 331 and 244 lines on 2026-11-17).",
+   "answered": "2026-11-16"
   },
   {
    "topic": "One run or two staged runs",
@@ -76,6 +80,10 @@
     {
      "choice": "One run",
      "what_happens": "One run does everything on one branch; its done check needs all fifteen rows of the definition of done, desk included."
+    },
+    {
+     "choice": "Three data-first stages",
+     "what_happens": "Stage 1 loads the data, stage 2 computes the weighted averages, stage 3 reruns the projects as the benchmark; each stage launches only after the one before is done."
     }
    ],
    "recommendation": "Two staged runs",
@@ -120,7 +128,11 @@
      "found": "nothing that decides it"
     }
    ],
-   "kind": "judgment"
+   "kind": "judgment",
+   "status": "imported",
+   "answer": "Three data-first stages",
+   "answer_reason": "Owner's answer (the owner's decision of 2026-11-16 on the staged runs): stage 1 loads every budgeted project with its own budget as the truth through JSON and jq, with no estimating; stage 2 computes the weighted averages; stage 3 reruns the same projects as the benchmark.",
+   "answered": "2026-11-16"
   },
   {
    "topic": "Where the desk run starts",
@@ -139,6 +151,10 @@
     {
      "choice": "Set the work aside on a branch of its own",
      "what_happens": "The owner moves the uncommitted work to a branch of its own; main is clean; the run branches from main."
+    },
+    {
+     "choice": "Decided after stage 1",
+     "what_happens": "The desk app is left alone until stage 1 is done; its branch point is chosen then."
     }
    ],
    "recommendation": "Branch from the mapped commit",
@@ -183,7 +199,11 @@
     }
    ],
    "kind": "judgment",
-   "nature": "policy"
+   "nature": "policy",
+   "status": "imported",
+   "answer": "Decided after stage 1",
+   "answer_reason": "Owner's answer (the owner's decision of 2026-11-16 on the staged runs): no decision about the desk app until stage 1 is through. The desk is not part of stages 1 to 3.",
+   "answered": "2026-11-16"
   },
   {
    "topic": "The held-out estimate target",
@@ -206,7 +226,7 @@
    ],
    "recommendation": "Within 10 percent",
    "recommendation_reason": "It is the target already written in the definition of done and is a real improvement on 13 percent.",
-   "why_not_decided": "How much estimating error the firm accepts is the firm's policy.",
+   "why_not_decided": "The owner will set it from the stage 3 benchmark results (the owner's decision of 2026-11-16 on the staged runs).",
    "would_settle": "The owner confirming or changing the target.",
    "evidence": [
     {
@@ -246,7 +266,10 @@
     }
    ],
    "kind": "judgment",
-   "nature": "policy"
+   "nature": "policy",
+   "needed_for": [
+    "stage3"
+   ]
   },
   {
    "topic": "The evidence needed for a per-unit estimate",
@@ -269,7 +292,7 @@
    ],
    "recommendation": "At least three past projects and a quantity basis that matches",
    "recommendation_reason": "Three is the smallest number that shows a spread instead of one or two points, and the firm has few projects of each kind.",
-   "why_not_decided": "No document names a minimum; how much evidence is enough is the firm's call.",
+   "why_not_decided": "The owner will set it from the stage 3 benchmark results (the owner's decision of 2026-11-16 on the staged runs).",
    "would_settle": "The owner naming the minimum number of projects.",
    "evidence": [
     {
@@ -309,7 +332,10 @@
     }
    ],
    "kind": "judgment",
-   "nature": "policy"
+   "nature": "policy",
+   "needed_for": [
+    "stage3"
+   ]
   },
   {
    "topic": "Quantity tolerances",
@@ -368,7 +394,11 @@
     }
    ],
    "kind": "judgment",
-   "nature": "policy"
+   "nature": "policy",
+   "status": "imported",
+   "answer": "Keep the current tolerances",
+   "answer_reason": "Owner's answer (the owner's decision of 2026-11-16 on the staged runs): area and length 5 percent, counts exact, volume 10 percent, weight never compared.",
+   "answered": "2026-11-16"
   }
  ]
 }

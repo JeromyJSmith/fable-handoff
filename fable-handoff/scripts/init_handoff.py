@@ -338,7 +338,7 @@ PRESET_ADDS = ("protected_paths", "blocked_bash_patterns")
 PRESET_KEYS = (
     "verify_command", "verify_timeout_seconds", "question_system", "decisions_log", "evidence_ladder", "detective_functions",
     "quantity_tolerance", "adjudication_threshold", "adjudication_policy", "question_triage", "owner_rules",
-    "owner_rule_headings", "writable_outside_paths", "audit_accept", "preset", "launch_requires", "companion_repositories", "budget_tolerance", "deterministic_code", "related_locations", "definition_of_done", "final_phase", "shape", "branch", "pre_launch_decisions",
+    "owner_rule_headings", "writable_outside_paths", "audit_accept", "preset", "launch_requires", "companion_repositories", "budget_tolerance", "deterministic_code", "related_locations", "definition_of_done", "final_phase", "shape", "branch", "pre_launch_decisions", "desk_deferred",
 ) + PRESET_ADDS
 
 
@@ -359,7 +359,7 @@ def load_preset(name):
     shapes = preset.get("shapes") or {}
     shape = getattr(load_preset, "shape", None)
     if shapes and shape is None:
-        shape = "single" if "single" in shapes else None
+        shape = preset.get("default_shape") or ("single" if "single" in shapes else sorted(shapes)[0])
     if shape is not None:
         if shape not in shapes:
             fail("Preset %r has no mission shape %r. Shapes: %s." % (name, shape, ", ".join(sorted(shapes)) or "none"))
