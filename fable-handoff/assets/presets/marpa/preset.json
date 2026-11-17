@@ -719,7 +719,11 @@
    "why": "D175: no decision about the desk app until stage 1 is through",
    "map": "desk_map.py and its map at commit e50a89362 are kept for when the owner decides",
    "path": "/Volumes/MARPA/apps/marpa-desk"
-  }
+  },
+  "unreadable_paths": [
+   "runs",
+   "runs/**"
+  ]
  },
  "shapes": {
   "stage1": {

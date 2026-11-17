@@ -792,3 +792,38 @@ def test_intent_on_the_real_logs_finds_the_dropped_ulm_slope_and_sod_note():
     assert any("2 weeks" in j for j in joined), "the \"2 WEEKS\" sod-timing note was dropped by a pipeline run and must be found"
     text = out.read_text()
     assert "## Data lost or regressed" in text and "10.7%" in text and "2 WEEKS" in text
+
+
+# --------------------------------------------------------------------------- old runs are never a source
+
+def test_the_guard_blocks_reading_run_output_and_allows_everything_else(tmp_path):
+    from conftest import hook
+    project = bare_project(tmp_path)
+    assert init(project, "--preset", "marpa").returncode == 0
+    assert read_cfg(project)["unreadable_paths"] == ["runs", "runs/**"]
+    assert "Read|Grep|Glob" in json.dumps(json.loads((project / ".claude/settings.json").read_text())["hooks"]["PreToolUse"])
+    (project / "runs/2026-11-16_x").mkdir(parents=True)
+    (project / "runs/2026-11-16_x/report.json").write_text("{}")
+    rules = (project / "fable/OPERATING_RULES.md").read_text()
+    assert "Agents never mine old runs for information or use them as a source." in rules
+    g = lambda tool, inp: hook(project, "fable_guard.py", {"tool_name": tool, "tool_input": inp, "cwd": str(project)})
+    blocked = [
+        g("Read", {"file_path": str(project / "runs/2026-11-16_x/report.json")}),
+        g("Read", {"file_path": "runs/2026-11-16_x/report.json"}),
+        g("Grep", {"pattern": "slope", "path": "runs"}),
+        g("Glob", {"pattern": "runs/**/*.json"}),
+        g("Bash", {"command": "cat runs/2026-11-16_x/report.json | jq ."}),
+        g("Bash", {"command": "cd src && grep -r slope ../runs"}),
+    ]
+    for proc in blocked:
+        assert proc.returncode == 2 and "run output that this run may not read" in proc.stderr, proc.stderr
+    allowed = [
+        g("Read", {"file_path": str(project / "src/slug.py")}),
+        g("Grep", {"pattern": "slope", "path": "src"}),
+        g("Grep", {"pattern": "slope"}),
+        g("Glob", {"pattern": "**/*.py"}),
+        g("Bash", {"command": "grep -rn slope src app_tests"}),
+        g("Bash", {"command": "echo runs are kept elsewhere"}),
+    ]
+    for proc in allowed:
+        assert proc.returncode == 0, proc.stderr

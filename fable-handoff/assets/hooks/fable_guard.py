@@ -42,6 +42,13 @@ WRITE_TOOLS = {
     "NotebookEdit": "notebook_path",
 }
 
+# Tools that read, and the key that holds their path. A path listed in
+# "unreadable_paths" of fable/handoff.json may not be read by them, or named in
+# a shell command (the owner's rule that agents never mine old run output).
+READ_TOOLS = {"Read": "file_path", "Grep": "path", "Glob": "path", "NotebookRead": "notebook_path"}
+FILE_READERS = {"cat", "less", "more", "head", "tail", "grep", "egrep", "rg", "ag", "find", "fd", "ls", "tree", "jq", "sed", "awk",
+                "cp", "rsync", "tar", "zip", "open", "bat", "wc", "diff", "file", "stat", "python", "python3", "uv", "node", "bun", "duckdb", "sqlite3"}
+
 # Shell tools. On Windows without Git Bash, Claude Code runs commands through
 # PowerShell instead of Bash, with the same `command` field.
 SHELL_TOOLS = {"Bash", "PowerShell"}
@@ -638,13 +645,69 @@ def check_bash(project, protected, blocked, command, cwd):
                     seen.append(base)
 
 
+def load_unreadable(project):
+    try:
+        with open(os.path.join(project, "fable", "handoff.json"), encoding="utf-8") as handle:
+            paths = json.load(handle).get("unreadable_paths") or []
+    except (OSError, ValueError, AttributeError):
+        return None
+    return Protected([str(x) for x in paths]) if isinstance(paths, list) and paths else None
+
+
+def unreadable_reason(project, unreadable, path, base):
+    rel = relative_to_project(project, expand(path, project, base), base)
+    if rel is None:
+        return None
+    return unreadable.match(rel)
+
+
+def check_reads(project, unreadable, tool, tool_input, cwd):
+    paths = []
+    if tool in READ_TOOLS:
+        paths += [tool_input.get(READ_TOOLS[tool]), tool_input.get("file_path")]
+        if tool == "Glob":
+            base = tool_input.get("path") or "."
+            paths.append(os.path.join(base, str(tool_input.get("pattern") or "")).split("*")[0] or None)
+    bases = [cwd]
+    if tool not in READ_TOOLS:
+        command = tool_input.get("command")
+        if isinstance(command, str):
+            for tokens in split_commands(strip_heredocs(command)):
+                words = plain_words(tokens)
+                if words and words[0] in ("cd", "pushd") and len(words) > 1:
+                    bases.append(os.path.normpath(os.path.join(cwd, expand(words[1], project, cwd))))
+                # A word with a slash is a path; a bare word counts only after a command that reads files.
+                reader = bool(words) and os.path.basename(words[0]) in FILE_READERS
+                paths += [w for w in words[1:] if not w.startswith("-") and ("/" in w or reader)]
+                paths += [text for kind, text in tokens if kind != "word"]
+    for path in paths:
+        if not (isinstance(path, str) and path.strip()):
+            continue
+        for base in bases:
+            reason = unreadable_reason(project, unreadable, path.strip(), base)
+            if reason:
+                break
+        if reason:
+            block(
+                "%s is run output that this run may not read: %s (unreadable_paths of fable/handoff.json)." % (path, reason.replace("protected_paths", "unreadable_paths")),
+                "Old run output is never a source of information. Work from the project's data, its documents and the "
+                "troubleshooting document, which holds every finding taken from runs.",
+            )
+
+
 def main():
     payload = read_payload()
     project = find_project(payload)
     if project is None:
         return 0
     tool = payload.get("tool_name")
-    if tool not in SHELL_TOOLS and tool not in WRITE_TOOLS:
+    if tool not in SHELL_TOOLS and tool not in WRITE_TOOLS and tool not in READ_TOOLS:
+        return 0
+    unreadable = load_unreadable(project)
+    if tool in READ_TOOLS:
+        if unreadable is not None:
+            tool_input = payload.get("tool_input") if isinstance(payload.get("tool_input"), dict) else {}
+            check_reads(project, unreadable, tool, tool_input, payload.get("cwd") or project)
         return 0
     try:
         protected, blocked, allow_outside = load_config(project)
@@ -658,6 +721,8 @@ def main():
     if tool in SHELL_TOOLS:
         command = tool_input.get("command")
         if isinstance(command, str) and command.strip():
+            if unreadable is not None:
+                check_reads(project, unreadable, tool, tool_input, cwd)
             check_bash(project, protected, blocked, command, cwd)
     else:
         # NotebookEdit's field is not in the hooks reference, so accept either name.

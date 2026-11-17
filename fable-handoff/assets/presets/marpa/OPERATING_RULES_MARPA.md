@@ -5,7 +5,8 @@ Building the product:
 - Quantities come from the drawing's geometry, never typed in. Each budget line records the class, the geometry it was measured from, the unit, the rate and where the rate came from.
 - A gap between a generated budget and the firm's real one is explained in plain words or parked as a question. Never close a gap by changing the real budget or the tolerance.
 - The desk app is not part of stages 1 to 3; leave it untouched until the owner decides about it after stage 1.
-- Run output goes to the git-ignored runs/ folder and is never committed. Read it only to find what went wrong, record each finding in the troubleshooting document, and never mine earlier runs as a source.
+- Run output goes to the git-ignored runs/ folder and is never committed.
+- Agents never mine old runs for information or use them as a source. This run does not read runs/ at all; the guard blocks it. Findings from runs live in the troubleshooting document, which people write when they troubleshoot.
 - The allocation engine in /Volumes/MARPA/method/allocation is read and run through its own commands only; never edit its code, guide or adjustments.
 - No language model call in any calculation. Jev only for bounded decisions under a written schema, in the files deterministic_code allows.
 

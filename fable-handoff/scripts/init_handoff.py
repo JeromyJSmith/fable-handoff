@@ -89,7 +89,7 @@ This codebase is yours for the length of this run. You are responsible for its d
 
 # (file in .claude/hooks, hook event, matcher or None)
 HOOKS = [
-    ("fable_guard.py", "PreToolUse", "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit"),
+    ("fable_guard.py", "PreToolUse", "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob|NotebookRead"),
     ("fable_stop_gate.py", "Stop", None),
     ("fable_session_context.py", "SessionStart", None),
 ]
@@ -338,7 +338,7 @@ PRESET_ADDS = ("protected_paths", "blocked_bash_patterns")
 PRESET_KEYS = (
     "verify_command", "verify_timeout_seconds", "question_system", "decisions_log", "evidence_ladder", "detective_functions",
     "quantity_tolerance", "adjudication_threshold", "adjudication_policy", "question_triage", "owner_rules",
-    "owner_rule_headings", "writable_outside_paths", "audit_accept", "preset", "launch_requires", "companion_repositories", "budget_tolerance", "deterministic_code", "related_locations", "definition_of_done", "final_phase", "shape", "branch", "pre_launch_decisions", "desk_deferred",
+    "owner_rule_headings", "writable_outside_paths", "audit_accept", "preset", "launch_requires", "companion_repositories", "budget_tolerance", "deterministic_code", "related_locations", "definition_of_done", "final_phase", "shape", "branch", "pre_launch_decisions", "desk_deferred", "unreadable_paths",
 ) + PRESET_ADDS
 
 
