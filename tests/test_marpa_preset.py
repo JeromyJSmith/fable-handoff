@@ -90,7 +90,7 @@ def test_the_preset_verify_command_is_used_when_none_is_given(tmp_path):
     assert proc.returncode == 0, proc.stderr
     cfg = read_cfg(project)
     assert cfg["verify_command"].startswith("test -f docs/standard/DEFINITION_OF_DONE.md && uv run pytest -q tests")
-    assert "(cd /Volumes/MARPA/method/allocation && uv run pytest -q)" in cfg["verify_command"]
+    assert "(cd /Volumes/MARPA/method/allocation && UV_PROJECT_ENVIRONMENT=$HOME/worktrees/_env/marpa-allocation uv run --no-sync pytest -q)" in cfg["verify_command"]
     assert "bun run test" in cfg["verify_command"] and cfg["verify_command"].endswith("test -f done_check.py && uv run done_check.py --check")
     assert cfg["verify_timeout_seconds"] == 7200
     done = cfg["definition_of_done"]

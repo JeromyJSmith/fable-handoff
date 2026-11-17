@@ -17,7 +17,7 @@ Where this mission and those documents differ, the documents win; record the dif
 | --- | --- | --- |
 | This repository (the MARPA standard) | The run's home | Decoding, intake, the averages, the estimate, the API and the done check, committed on the run branch |
 | /Volumes/MARPA/apps/marpa-desk | Companion repository | The desk app, on its own run branch; its tests run with `bun run test` |
-| /Volumes/MARPA/method/allocation | The allocation engine: read and run | Its own commands only, as its README gives them (the `allocation check` and `allocation all` modules through uv, and `uv run pytest`). Integrate with it; never rebuild or edit it |
+| /Volumes/MARPA/method/allocation | The allocation engine: read and run | Its own commands only, as its README gives them (the `allocation check` and `allocation all` modules), always with `UV_PROJECT_ENVIRONMENT=~/worktrees/_env/marpa-allocation uv run --no-sync`. Integrate with it; never rebuild or edit it |
 
 ### Preparation, done before launch: the desk map
 

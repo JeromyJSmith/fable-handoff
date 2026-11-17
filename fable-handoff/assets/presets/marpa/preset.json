@@ -5,7 +5,7 @@
  "operating_rules_section": "OPERATING_RULES_MARPA.md",
  "config": {
   "preset": "marpa",
-  "verify_command": "test -f docs/standard/DEFINITION_OF_DONE.md && uv run pytest -q tests && (cd /Volumes/MARPA/method/allocation && uv run pytest -q) && (cd /Volumes/MARPA/apps/marpa-desk && bun run test) && test -f done_check.py && uv run done_check.py --check",
+  "verify_command": "test -f docs/standard/DEFINITION_OF_DONE.md && uv run pytest -q tests && (cd /Volumes/MARPA/method/allocation && UV_PROJECT_ENVIRONMENT=$HOME/worktrees/_env/marpa-allocation uv run --no-sync pytest -q) && (cd /Volumes/MARPA/apps/marpa-desk && bun run test) && test -f done_check.py && uv run done_check.py --check",
   "verify_timeout_seconds": 7200,
   "question_system": {
    "type": "bcf",
@@ -659,7 +659,24 @@
      "uv run python -m allocation all",
      "uv run pytest"
     ],
-    "writes": "only its own commands write, into its configured outputs; the run never edits its code, guide or adjustments (adjustments.yaml changes follow the owner's rules)"
+    "writes": "only its own commands write, into its configured outputs; the run never edits its code, guide or adjustments (adjustments.yaml changes follow the owner's rules)",
+    "environment": {
+     "UV_PROJECT_ENVIRONMENT": "~/worktrees/_env/marpa-allocation",
+     "python": "3.14.10",
+     "run_with": "UV_PROJECT_ENVIRONMENT=~/worktrees/_env/marpa-allocation uv run --no-sync <command>"
+    },
+    "proven_2026_11_17": {
+     "check": "all inputs present (exit 0)",
+     "verify-inputs": "352 inputs, every hash matches (exit 0)",
+     "tests": "not run: its suite writes QA evidence into its outputs, which this preparation must not change"
+    },
+    "portability": [
+     "plain `uv run` there creates a new empty .venv in the folder; always set UV_PROJECT_ENVIRONMENT and --no-sync",
+     "the environment and reference roots in allocation.yaml name this machine",
+     "most dependencies in its pyproject.toml are not pinned exactly",
+     "29 files changed or new and not committed (last commit 9b18bc0); a copy must take the working tree, and the run relies on uncommitted code",
+     "PDF and DXF payloads are kept outside git; a clone needs them transferred by manifest"
+    ]
    }
   ],
   "definition_of_done": {
