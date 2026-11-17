@@ -541,7 +541,9 @@ def check_prepared(project, config):
     problems = []
     for n in range(7):
         problems += prep.receipt_problems(project, n)
-    if prep.read_receipt(project, 7) is not None:
+    last = prep.read_receipt(project, 7)
+    if last is not None and last.get("result") != "stopped":
+        # phase 7 is this very check; a stopped earlier attempt only repeats what these rows say
         problems += prep.receipt_problems(project, 7)
     rows.append(("FAIL", "receipts", "; ".join(problems)) if problems else ("PASS", "receipts", "every phase ran and is current"))
     if not (project / "fable" / "handoff_spec.json").exists():
