@@ -372,6 +372,25 @@ def evaluate(project, config):
             )
         verify = "passed"
 
+    # Standards checks: named commands a preset sets beside the verify command
+    # ("standards_checks"); each must exit 0 before the run may stop.
+    for check in config.get("standards_checks") or []:
+        if not isinstance(check, dict) or not str(check.get("command") or "").strip():
+            continue
+        code, output = run_verify(check["command"], project, int(check.get("timeout_seconds") or 1800))
+        if code != 0:
+            return (
+                "The run is not finished: the standards check \"%s\" fails.\n"
+                "\n"
+                "Command: %s\n"
+                "Why it gates done: %s\n"
+                "Last lines of its output:\n"
+                "%s\n"
+                "\n"
+                "What to do now: fix the work so the standard holds. Do not change the check or the standard."
+                % (check.get("name", "?"), check["command"], check.get("why", "the project's standard"), tail(output)),
+                {"open_tasks": 0, "verify": verify, "standards_check": check.get("name")},
+            )
     calls = model_call_findings(project, config)
     if calls:
         return (

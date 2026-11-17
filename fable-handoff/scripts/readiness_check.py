@@ -479,6 +479,26 @@ def check_owner_decisions(project, config):
             "; waiting for a later shape: %s" % "; ".join(later) if later else ""))]
 
 
+def check_standards(project, config):
+    """Each standards check (a named command that gates done) can run here; it may fail until the run is done."""
+    rows = []
+    for check in config.get("standards_checks") or []:
+        name = str((check or {}).get("name") or "?")
+        command = str((check or {}).get("command") or "").strip()
+        if not command:
+            rows.append(("FAIL", "standards check", "'%s' names no command" % name))
+            continue
+        code, output, _ = run_shell(command, project, int(check.get("timeout_seconds") or 1800))
+        if code is None:
+            rows.append(("FAIL", "standards check", "'%s' did not finish in time" % name))
+        elif cannot_run(code, output):
+            cause = next((l.strip() for l in output.splitlines() if CANNOT_RUN.search(l)), (output.strip().splitlines() or [""])[-1])[:160]
+            rows.append(("FAIL", "standards check", "'%s' cannot run here (%s), so it could never pass and done would never be reached" % (name, cause)))
+        else:
+            rows.append(("PASS", "standards check", "'%s' runs (%s now); it must pass before the run may stop" % (name, "passing" if code == 0 else "failing")))
+    return rows
+
+
 def check_companions(config):
     """Each companion repository exists, is on its own run branch (never a release branch) and is clean."""
     rows = []
@@ -833,6 +853,7 @@ def main():
     rows += check_companions(config)
     rows += check_model_calls(project, config)
     rows += check_owner_decisions(project, config)
+    rows += check_standards(project, config)
     rows += branch_rows
     if is_repo:
         rows += check_git_clean(dirty_before, dirty_after, args.allow_dirty)

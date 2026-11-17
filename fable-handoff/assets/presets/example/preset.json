@@ -101,7 +101,13 @@
      ],
      "abstain": true
     }
-   }
+   },
+   "answer_rules": [
+    {
+     "pattern": "\\b(?:n/?a|tbd|placeholder)\\b",
+     "why": "every entry has a real name"
+    }
+   ]
   },
   "question_triage": {
    "judgment_cues": [
@@ -155,7 +161,14 @@
     "every entry loaded",
     "every total reconciles"
    ]
-  }
+  },
+  "standards_checks": [
+   {
+    "name": "naming standard",
+    "command": "test -f checks/naming_ok",
+    "why": "every entry follows the naming standard"
+   }
+  ]
  },
  "shapes": {
   "stage1": {
