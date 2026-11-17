@@ -701,3 +701,27 @@ def test_the_outside_write_guard_watches_the_allocation_documents_and_sees_a_cha
     assert conftest.changed(before, conftest.fingerprint([target])) == []
     target.write_text("x\n")
     assert conftest.changed(before, conftest.fingerprint([target])) == [str(target)]
+
+
+def test_the_shape_files_are_current_and_complete():
+    proc = run([*UV_SCRIPT, str(PRESET_DIR / "build_shape_files.py"), "--check"])
+    assert proc.returncode == 0, "run build_shape_files.py after changing preset.json: " + proc.stdout
+    for shape in ("single", "stage1", "stage2"):
+        for name in ("MISSION.md", "STATE.md", "DECISIONS.md"):
+            assert "{{FILL" not in (PRESET_DIR / "shapes" / shape / name).read_text(), (shape, name)
+
+
+@pytest.mark.parametrize("shape", ["single", "stage1", "stage2"])
+def test_a_shape_is_ready_except_for_the_owners_answers_and_outside_facts(tmp_path, shape):
+    project = bare_project(tmp_path)
+    proc = run([*script("init_handoff.py"), "--project", str(project), "--preset", "marpa", "--shape", shape, "--apply-settings", "--max-budget-usd", "200"])
+    assert proc.returncode == 0, proc.stderr
+    write_cfg(project, detective_functions=local_functions(), companion_repositories=[], verify_command=read_cfg(project)["verify_command"])
+    layout_like_marpa(project)
+    git(project, "switch", "-qc", read_cfg(project)["branch"])
+    commit_all(project, "package")
+    _, data = readiness(project)
+    st = statuses(data)
+    for check in ("mission", "ledger", "decisions", "detective functions", "no model calls"):
+        assert st[check] == "PASS", (check, next(r for r in data["rows"] if r["check"] == check))
+    assert st["owner decisions"] == "FAIL"

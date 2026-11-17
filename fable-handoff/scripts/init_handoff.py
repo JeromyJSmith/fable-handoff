@@ -365,6 +365,11 @@ def load_preset(name):
             fail("Preset %r has no mission shape %r. Shapes: %s." % (name, shape, ", ".join(sorted(shapes)) or "none"))
         preset = dict(preset, config=dict(preset.get("config") or {}, **(shapes[shape].get("config") or {}), shape=shape))
     texts = {}
+    if shape is not None:
+        for key, name in (("mission_file", "MISSION.md"), ("state_file", "STATE.md"), ("decisions_file", "DECISIONS.md")):
+            path = folder / "shapes" / shape / name
+            if path.exists():
+                texts[key] = path.read_text(encoding="utf-8")
     if shape is not None and shapes[shape].get("mission_note"):
         texts["shape_note"] = (folder / shapes[shape]["mission_note"]).read_text(encoding="utf-8").strip() + "\n"
     if preset.get("owner_decisions"):
@@ -478,7 +483,9 @@ def main():
     rules = rules.replace("{{OWNERSHIP_BLOCK}}", OWNERSHIP_BLOCK if args.ownership else "").rstrip() + "\n"
     if preset_texts.get("operating_rules_section"):
         rules += "\n" + preset_texts["operating_rules_section"]
-    mission = (ASSETS / "templates" / "MISSION.md").read_text(encoding="utf-8")
+    mission = preset_texts.get("mission_file") or (ASSETS / "templates" / "MISSION.md").read_text(encoding="utf-8")
+    if preset_texts.get("state_file") and not draft.get("seed_tasks"):
+        state_text = preset_texts["state_file"]
     if preset_texts.get("mission_section"):
         section = preset_texts["mission_section"] + "\n" + (("\n" + preset_texts["shape_note"] + "\n") if preset_texts.get("shape_note") else "")
         mission = mission.replace("\n## Done\n", "\n" + section + "\n## Done\n", 1) if "\n## Done\n" in mission else mission.rstrip() + "\n\n" + section
@@ -494,7 +501,7 @@ def main():
         "fable/MISSION.md": mission,
         "fable/OPERATING_RULES.md": rules,
         "fable/STATE.md": state_text,
-        "fable/DECISIONS.md": ASSETS / "templates" / "DECISIONS.md",
+        "fable/DECISIONS.md": preset_texts.get("decisions_file") or ASSETS / "templates" / "DECISIONS.md",
         **CODE_FILES,
         **AGENT_FILES,
     }
