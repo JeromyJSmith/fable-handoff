@@ -216,3 +216,35 @@ first.
   1.0 were reproduced and fixed on Linux by simulating macOS's `python3`.
 - Adjudication confidence is not a probability until the back-test calibrates
   it.
+
+## 9. Done on this branch (2026-11-16)
+
+- `init_handoff.py --preset marpa` and `assets/presets/marpa/` hold every row
+  of the table in section 5 except case storage in MARPA's pipe and gap
+  analysis corpus changes. The preset's README lists each setting and its
+  MARPA source.
+- The Jev decision framework (disler/ten-levels-of-jev) is applied to
+  adjudication in the engine, generically: a written schema, the answer among
+  the options offered, the abstain exit never applied, companions, post-checks,
+  a receipt and confidence bands. The preset's README maps each place.
+- `detective_backtest.py` gained `--min-accepted`, a cutoff table, and blind
+  adjudications in the verdicts.
+- Tests: `tests/test_marpa_preset.py`; `uv run pytest` passes 314.
+
+### Back-test scores (37 ruled classes, run blind)
+
+| Function | Evidence | Right | Accuracy |
+| --- | --- | --- | --- |
+| name match | 114 | 102 | 0.895 |
+| drawing content | 3 | 2 | 0.667 |
+| budget match | 28 | 5 | 0.179 |
+| rules and precedent, own ruling hidden | 20 | 2 | 0.100 |
+
+Calibrated adjudication threshold: **0.88** (lowest confidence with at least
+10 answers at least 90% right; MARPA's own test in tenths gives 0.90).
+Verdicts: 29 right, all settled by adjudication; 1 wrong (a class the name and
+its project document place under groundcovers, ruled flatwork); 7 open.
+
+The decided set names client projects, so it is rebuilt locally by
+`export_decided_cases.py` and kept out of git.
+

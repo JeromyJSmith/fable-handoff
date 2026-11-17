@@ -1,5 +1,13 @@
 # Changelog
 
+## marpa branch (2026-11-16, not released)
+
+- `init_handoff.py --preset NAME` and the MARPA preset (`assets/presets/marpa/`).
+- Adjudication under a written schema (the Jev decision framework): schema, options offered, abstain exit, companions, post-checks, receipt, confidence bands.
+- `detective_backtest.py --min-accepted`, a cutoff table, blind adjudications in verdicts.
+- Weight, flats, pallets and lump sums in the units; a null tolerance is never compared.
+- Project and preset question-triage words; project owner rules; `writable_outside_paths` in the guard.
+
 ## 1.3.1 (2026-11-16)
 
 - The detective functions must be the project's own. Init writes the generic registry marked as examples; the preparing agent analyses the project and replaces it (`references/detective-standard.md`, section 7, and the new step in SKILL.md phase 4). Each function names its `project_sources`, and every path must match something in the project. `fable/detective.py functions` and the readiness check refuse generic examples, missing sources and sources that match nothing.
