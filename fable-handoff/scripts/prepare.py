@@ -457,6 +457,21 @@ def phase_6(ctx: Ctx, outputs: dict) -> dict:
         # They are kept for review, never asked as they are; the owner's questions live in the question system.
         (fable / "drafted_questions.json").write_text(json.dumps(drafted, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     spec["open_questions"] = []
+    # acceptance: the definition of done, each row verified by the done check (or the verify command);
+    # preflight's drafted criteria are kept for review
+    dod = cfg.get("definition_of_done") or {}
+    verifier = (dod.get("check") or "").split(";")[0].strip() or cfg.get("verify_command") or ""
+    drafted_criteria = spec.get("acceptance_criteria") or []
+    if dod.get("rows"):
+        if drafted_criteria:
+            (fable / "drafted_criteria.json").write_text(json.dumps(drafted_criteria, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+        spec["acceptance_criteria"] = [{"id": "d%d" % (i + 1), "text": row, "status": "open", "verified_by": verifier, "source": "definition_of_done"}
+                                       for i, row in enumerate(dod["rows"])]
+    else:
+        for c in drafted_criteria:
+            c.setdefault("verified_by", None)
+            if c.get("status") == "open" and not c.get("verified_by"):
+                c["verified_by"] = cfg.get("verify_command")
     spec.update({
         "goal": dict(spec.get("goal") or {}, job=sec.get("Job", ""), why=sec.get("Why", "")),
         "commands": dict(spec.get("commands") or {}, verify=cfg.get("verify_command") or ""),
