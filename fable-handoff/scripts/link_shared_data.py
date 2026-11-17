@@ -107,6 +107,16 @@ def main() -> int:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.symlink_to(origin, target_is_directory=origin.is_dir())
         report.append({"path": rel, "state": "linked now", "to": str(origin)})
+    # A link to an ignored folder is not ignored when the pattern ends in "/" (it matches folders, and a link is
+    # not one), so every shared path is also listed in .git/info/exclude: local to this checkout, never committed.
+    exclude = project / ".git" / "info" / "exclude"
+    if not args.check and (project / ".git").is_dir():
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        current = exclude.read_text(encoding="utf-8").splitlines() if exclude.exists() else []
+        wanted = ["/" + rel for rel in paths if "/" + rel not in current]
+        if wanted:
+            with exclude.open("a", encoding="utf-8") as handle:
+                handle.write(("" if not current or current[-1] == "" else "\n") + "# shared data linked by link_shared_data.py\n" + "\n".join(wanted) + "\n")
     print(json.dumps({"from": str(source), "paths": report}, indent=1))
     return 1 if bad else 0
 
