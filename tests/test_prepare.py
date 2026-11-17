@@ -185,3 +185,21 @@ def test_the_notebook_runs_headless_and_writes_the_same_receipts(tmp_path):
     assert json.loads((project / "fable/receipts/7-readiness.json").read_text())["result"] == "awaiting owner sign-off"
     text = (SKILL / "scripts/prepare.marimo.py").read_text()
     assert '"marimo==0.25.2", "wigglystuff==0.5.40"' in text and "ProgressBar" in text and "TraceView" in text and "mo.stop(" in text
+
+
+def test_phase_zero_links_the_shared_data_a_fresh_worktree_lacks(tmp_path):
+    main = tmp_path / "main"
+    (main / "loaded").mkdir(parents=True)
+    (main / "loaded/rows.ndjson").write_text("{}\n")
+    project = sample(tmp_path, "worktree")
+    (project / "fable").mkdir()
+    (project / "fable/handoff.json").write_text(json.dumps({"shared_data": {"from": str(main), "paths": ["loaded"]}}))
+    proc = prepare(project, "--until", "0")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert (project / "loaded").is_symlink() and (project / "loaded/rows.ndjson").read_text() == "{}\n"
+    receipt = json.loads((project / "fable/receipts/0-decide.json").read_text())
+    assert any(c["what"] == "the shared data is present or linked" and c["ok"] for c in receipt["checks"])
+    (project / "loaded").unlink()
+    (project / "fable/handoff.json").write_text(json.dumps({"shared_data": {"from": str(tmp_path / "nowhere"), "paths": ["loaded"]}}))
+    proc = prepare(project, "--until", "0")
+    assert proc.returncode == 1 and "shared data" in proc.stdout

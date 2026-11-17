@@ -152,6 +152,7 @@ class Ctx:
     project: Path
     preset: str | None = None
     shape: str | None = None
+    shared_from: str | None = None
     logs: list = field(default_factory=list)
     no_logs: bool = False
     goal: str | None = None
@@ -244,6 +245,15 @@ def phase_0(ctx: Ctx, outputs: dict) -> dict:
     check(checks, "the repository has a commit to start from", bool(head))
     if ctx.preset:
         check(checks, "the preset %s exists" % ctx.preset, (SKILL / "assets/presets" / ctx.preset / "preset.json").exists())
+    # A fresh worktree lacks the git-ignored data the project's tests read: link it before discovery runs them.
+    shared = (load_config(ctx.project) or preset_config(ctx.preset, ctx.shape)).get("shared_data") or {}
+    if shared:
+        argv = [*script("link_shared_data.py"), "--project", "."] + (["--preset", ctx.preset] if ctx.preset and not load_config(ctx.project) else [])
+        argv += ["--from", ctx.shared_from] if ctx.shared_from else []
+        commands.append(run(ctx, 0, argv, ok_codes=(0, 1)))
+        report = json.loads(commands[-1]["stdout_tail"] or "{}") if commands[-1]["stdout_tail"].strip().startswith("{") else {}
+        missing = [p["path"] for p in report.get("paths", []) if p["state"].startswith("missing")]
+        check(checks, "the shared data is present or linked", not missing and commands[-1]["exit"] == 0, ", ".join(missing[:8]) or commands[-1]["stderr_tail"][-300:])
     return {"checks": checks, "commands": commands, "inputs": [], "leaves": [], "data": {"head": head}}
 
 
@@ -554,9 +564,11 @@ def main() -> int:
     ap.add_argument("--verify-command")
     ap.add_argument("--apply-settings", action="store_true")
     ap.add_argument("--max-budget-usd", type=float)
+    ap.add_argument("--shared-from", help="the main checkout to link shared_data from, in place of the preset's shared_data.from")
     args = ap.parse_args()
     ctx = Ctx(project=Path(args.project).expanduser().resolve(), preset=args.preset, shape=args.shape, logs=args.logs, no_logs=args.no_logs,
-              goal=args.goal, verify_command=args.verify_command, apply_settings=args.apply_settings, max_budget_usd=args.max_budget_usd)
+              goal=args.goal, verify_command=args.verify_command, apply_settings=args.apply_settings, max_budget_usd=args.max_budget_usd,
+              shared_from=args.shared_from)
     outputs = {}
     for n in range(args.start, min(args.until, 7) + 1):
         r = run_phase(ctx, n, outputs)
