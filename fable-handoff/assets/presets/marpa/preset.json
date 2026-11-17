@@ -761,18 +761,16 @@
   ],
   "shared_data": {
    "from": "/Volumes/MARPA/_New_APP/data/external/marpa-desk/sources/ontology-duckdb",
-   "paths": [
-    "ndjson",
-    "farber-dd.duckdb",
-    "inputs/owner-import-2026-11-16",
-    "inputs/Financials",
-    "vwx/out/vwx_stage.duckdb",
-    "vwx/out/vwx_geometry.duckdb",
-    "archive",
-    "jev-receipts",
-    "class_images"
+   "all_ignored": true,
+   "exclude": [
+    "handoff/held",
+    "handoff/scratch",
+    "retired-mirage-trial",
+    "inventory/.scratch",
+    "SPEC.md.orig",
+    "run_pipeline.sh.orig"
    ],
-   "why": "git-ignored data stage 1 reads; a fresh worktree links it from the main checkout (link_shared_data.py), so the one working database stays the only one"
+   "why": "the git-ignored data stage 1 and the standard's tests read (loaded NDJSON, the working database, inputs, decoded drawings, archives, receipts, vendor references); a fresh worktree links it from the main checkout with link_shared_data.py"
   }
  },
  "shapes": {
