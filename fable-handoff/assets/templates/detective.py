@@ -288,6 +288,8 @@ def adjudication_problems(adj: dict, config: dict) -> list[str]:
     # that a component word is never an item. Each is a regular expression the
     # answer must not match, with the reason.
     for rule in policy.get("answer_rules") or []:
+        if isinstance(rule, dict) and rule.get("schemas") and adj.get("schema") not in rule["schemas"]:
+            continue  # a rule may apply to some schemas only
         if isinstance(rule, dict) and rule.get("pattern") and re.search(rule["pattern"], str(adj.get("answer") or ""), re.IGNORECASE):
             out.append("its answer '%s' breaks a rule of the standard: %s" % (adj.get("answer"), rule.get("why", rule["pattern"])))
     if policy.get("require_receipt") and not str(adj.get("receipt") or "").strip():

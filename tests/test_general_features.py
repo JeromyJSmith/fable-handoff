@@ -397,3 +397,6 @@ def test_an_adjudicated_answer_may_not_break_a_rule_of_the_standard(tmp_path):
     result = detective().verdict(case, cfg, tmp_path)
     assert result["verdict"] == "likely" and "breaks a rule of the standard: every entry has a real name" in result["why"]
     assert detective().verdict(adjudicated_case(), cfg, tmp_path)["verdict"] == "settled by adjudication"
+    # a rule scoped to other schemas does not apply
+    cfg["adjudication_policy"]["answer_rules"][0]["schemas"] = ["item_name"]
+    assert detective().verdict(case, cfg, tmp_path)["verdict"] == "settled by adjudication"
