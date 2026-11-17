@@ -102,6 +102,7 @@ CODE_FILES = {
     "fable/launch.py": ASSETS / "templates" / "launch.py",
     "fable/questions.py": ASSETS / "templates" / "questions.py",
     "fable/detective.py": ASSETS / "templates" / "detective.py",
+    "fable/findings.py": ASSETS / "templates" / "findings.py",
     ".claude/hooks/fable_guard.py": ASSETS / "hooks" / "fable_guard.py",
     ".claude/hooks/fable_stop_gate.py": ASSETS / "hooks" / "fable_stop_gate.py",
     ".claude/hooks/fable_session_context.py": ASSETS / "hooks" / "fable_session_context.py",
@@ -340,7 +341,7 @@ PRESET_ADDS = ("protected_paths", "blocked_bash_patterns")
 PRESET_KEYS = (
     "verify_command", "verify_timeout_seconds", "question_system", "decisions_log", "evidence_ladder", "detective_functions",
     "quantity_tolerance", "adjudication_threshold", "adjudication_policy", "question_triage", "owner_rules",
-    "owner_rule_headings", "writable_outside_paths", "audit_accept", "preset", "launch_requires", "companion_repositories", "budget_tolerance", "deterministic_code", "related_locations", "definition_of_done", "final_phase", "shape", "branch", "pre_launch_decisions", "desk_deferred", "shared_data", "unreadable_paths", "standards_checks",
+    "owner_rule_headings", "writable_outside_paths", "audit_accept", "preset", "launch_requires", "companion_repositories", "budget_tolerance", "deterministic_code", "related_locations", "definition_of_done", "final_phase", "shape", "branch", "pre_launch_decisions", "desk_deferred", "shared_data", "require_receipts", "writer_lock", "held_out", "unreadable_paths", "standards_checks",
 ) + PRESET_ADDS
 
 

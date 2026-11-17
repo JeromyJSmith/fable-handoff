@@ -32,28 +32,31 @@ JOB = {
 }
 WHY = ("MARPA must run without its founder: anyone at the firm should turn a drawing into a priced, editable budget the same way the founder would. "
        "The data comes first and is the truth; correct, conserved money and plain, tested calculations come before speed or new features.")
+T = lambda text, check: "%s (check: `%s`)" % (text, check)
+DONE = "test -f done_check.py && uv run done_check.py --check --stage %d"
 TASKS = {
-    "stage1": ["Every budget file loaded, including inputs/owner-import-2026-11-16 and Mallett's drawing, each line accounted for",
-               "The component digit kept in every code; no item named only by a component word",
-               "The 153 uncoded lines worked out: slot, item and component, or an open case with what would settle it",
-               "The line_measure and item_measure tables built, with their unit rules tested",
-               "The finance formula check done for every workbook",
-               "Every budgeted project's .vwx decoded with vwx/run_vwx.sh",
-               "Write done_check.py with --stage 1; on success it writes fable/done/stage1.json",
-               "Full verify command passes and fable/REPORT.md is written"],
-    "stage2": ["Build takeoff from geometry: compatible quantities per class from the decoded polygons and paths, with tests",
-               "Allowances spread top-down through the allocation engine: 0 unexplained cents, 0 duplicated money",
-               "Weighted averages and sliders match their equations, with tests on fixed inputs",
-               "Category shares where the evidence is short; lump sums and fees counted once",
-               "Benchmarks with cohort and spread for every class unit",
-               "Extend done_check.py with --stage 2; on success it writes fable/done/stage2.json",
-               "Full verify command passes and fable/REPORT.md is written"],
-    "stage3": ["Build the back-test: every budgeted project rerun held out through calc.held_out",
-               "Ulm estimated like Solomon, its answer held out by calc.ANSWER_ONLY, compared with its budget and cost to complete",
-               "Solomon's first estimate with a source for every number and unknowns unpriced",
-               "Held-out error per category and in total, with coverage and bias, written for the owner",
-               "Extend done_check.py with --stage 3",
-               "Full verify command passes and fable/REPORT.md is written"],
+    "stage1": [T("Every budget file loaded, including inputs/owner-import-2026-11-16 and Mallett's drawing, each line accounted for", "uv run pytest -q tests/test_audit_stage1.py"),
+               T("The numbering standard holds in every slot: the component digit kept in every code, no item named only by a component word", "uv run pytest -q tests/test_numbering_standard.py"),
+               T("The 153 uncoded lines worked out: slot, item and component, or an open case with what would settle it", "uv run pytest -q tests/test_audit_stage1.py"),
+               T("The line_measure and item_measure tables built, with their unit rules tested", "uv run pytest -q tests/test_measure.py"),
+               T("The finance formula check done for every workbook", "uv run pytest -q tests/test_calculations.py"),
+               T("Every budgeted project's .vwx decoded with vwx/run_vwx.sh", "uv run pytest -q tests/test_vwx_pipeline.py"),
+               T("Full accounting: every drawn class homed or listed as unhomed, every line's money placed, labelled as spread, or shown as unplaced with its amount", DONE % 1),
+               T("Write done_check.py with --stage 1; on success it writes fable/done/stage1.json", DONE % 1),
+               T("Full verify command passes and fable/REPORT.md is written", "VERIFY")],
+    "stage2": [T("Build takeoff from geometry: compatible quantities per class from the decoded polygons and paths, with tests", DONE % 2),
+               T("Allowances spread top-down through the allocation engine: 0 unexplained cents, 0 duplicated money", DONE % 2),
+               T("Weighted averages and sliders match their equations, with tests on fixed inputs", "uv run pytest -q tests/test_calculations.py"),
+               T("Category shares where the evidence is short; lump sums and fees counted once", DONE % 2),
+               T("Benchmarks with cohort and spread for every class unit", DONE % 2),
+               T("Extend done_check.py with --stage 2; on success it writes fable/done/stage2.json", DONE % 2),
+               T("Full verify command passes and fable/REPORT.md is written", "VERIFY")],
+    "stage3": [T("Build the back-test: every budgeted project rerun held out through calc.held_out", "uv run pytest -q tests/test_calculations.py"),
+               T("Ulm estimated like Solomon, its answer held out by calc.ANSWER_ONLY, compared with its budget and cost to complete", DONE % 3),
+               T("Solomon's first estimate with a source for every number and unknowns unpriced", DONE % 3),
+               T("Held-out error per category and in total, with coverage and bias, written for the owner", DONE % 3),
+               T("Extend done_check.py with --stage 3", DONE % 3),
+               T("Full verify command passes and fable/REPORT.md is written", "VERIFY")],
 }
 DECISIONS_BEFORE = [
     "Three data-first stages: the data, the weighted averages, the benchmark; each its own run. Reason: the owner's decision of 2026-11-16; nothing is estimated before the data is in.",
@@ -98,17 +101,20 @@ def mission(shape: str, config: dict) -> str:
     done = text[done_start:]
     done = done.replace("`{{FILL: the verify command, character for character as in fable/handoff.json}}` exits 0.", "`%s` exits 0." % config["verify_command"])
     done = re.sub(r"- \{\{FILL: any further condition.*?\n", "- Every row of the definition of done for this shape meets its target (listed in the MARPA section).\n", done, flags=re.S)
-    return text[:done_start] + done
+    return DRAFT + "\n" + text[:done_start] + done
 
 
-def state(shape: str) -> str:
-    return ("# Run ledger\n\n## Current focus\n\nNot started.\n\n## Next step\n\nRead fable/MISSION.md and the documents it names first, then confirm or extend the task list below.\n\n"
-            "## Tasks\n\n" + "\n".join("- [ ] " + t for t in TASKS[shape]) + "\n\n## Notes for a resuming session\n\n"
+DRAFT = "<!-- draft: prepare.py phase 6 completes this -->"
+
+
+def state(shape: str, verify: str) -> str:
+    return (DRAFT + "\n# Run ledger\n\n## Current focus\n\nNot started.\n\n## Next step\n\nRead fable/MISSION.md and the documents it names first, then confirm or extend the task list below.\n\n"
+            "## Tasks\n\n" + "\n".join("- [ ] " + t.replace("`VERIFY`", "`%s`" % verify) for t in TASKS[shape]) + "\n\n## Notes for a resuming session\n\n"
             "Run the allocation engine with UV_PROJECT_ENVIRONMENT=~/worktrees/_env/marpa-allocation uv run --no-sync; a plain uv run makes a new environment there.\n")
 
 
 def decisions() -> str:
-    return ("# Decisions\n\n## Made before the run\n\n" + "\n".join("- " + d for d in DECISIONS_BEFORE) +
+    return (DRAFT + "\n# Decisions\n\n## Made before the run\n\n" + "\n".join("- " + d for d in DECISIONS_BEFORE) +
             "\n\n## Defaults for anything not listed\n\n- Prefer the option that is easiest to undo.\n- Prefer the smallest change that satisfies the mission.\n"
             "- Follow the conventions already in the codebase over personal preference.\n\n## Open questions for the owner\n\nNone.\n\n"
             "## Made during the run\n\n## Left for the owner\n")
@@ -120,7 +126,7 @@ def render(preset: dict) -> dict[str, str]:
         config = dict(preset["config"], **(spec.get("config") or {}), shape=shape)
         config.setdefault("branch", "fable/run-1")
         out["shapes/%s/MISSION.md" % shape] = mission(shape, config)
-        out["shapes/%s/STATE.md" % shape] = state(shape)
+        out["shapes/%s/STATE.md" % shape] = state(shape, config["verify_command"])
         out["shapes/%s/DECISIONS.md" % shape] = decisions()
     return out
 

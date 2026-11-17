@@ -168,7 +168,8 @@
     "command": "test -f checks/naming_ok",
     "why": "every entry follows the naming standard"
    }
-  ]
+  ],
+  "require_receipts": true
  },
  "shapes": {
   "stage1": {

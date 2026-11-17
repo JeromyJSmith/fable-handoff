@@ -1,3 +1,4 @@
+<!-- draft: prepare.py phase 6 completes this -->
 # Decisions
 
 ## Made before the run

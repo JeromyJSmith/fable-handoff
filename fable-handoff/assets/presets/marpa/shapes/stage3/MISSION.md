@@ -1,3 +1,4 @@
+<!-- draft: prepare.py phase 6 completes this -->
 # Mission: MARPA, the benchmark (stage 3 of 3)
 
 ## Job

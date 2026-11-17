@@ -6,6 +6,11 @@
 
 ## Unreleased
 
+- `scripts/prepare.py` and `scripts/prepare.marimo.py`: preparation as code. Phases 0 to 7 run in order; each checks its preconditions on the real state, runs its scripts through a validity check (no overwrite or delete, the writer lock, the stage order, held-out answers, run output never a source), checks what it leaves, and writes `fable/receipts/<n>-<name>.json` with commands, times and sha256 of inputs and outputs. It stops at the first failed check and at the owner's sign-off; the launch stays the owner's. The notebook shows each phase with a progress bar, a trace and tables, and `marimo export html` keeps a record (marimo 0.25.2 and wigglystuff 0.5.40, pinned).
+- With `require_receipts`, readiness requires every receipt and refuses a stale one, a missing spec, a missing `fable/detective.py`, a task without a check, and an open finding with no task. Draft markers always fail. Without it, a package with no receipts gets a warning.
+- `fable/findings.py`: the findings ledger built from INTENT.json (data lost or regressed), open detective cases and open gaps; each open finding is a ledger task checked by `findings.py check <id>`.
+- intent.py may write into the package (fable/) and also writes INTENT.json.
+
 - `init_handoff.py --preset NAME [--shape NAME]`: a firm's preset (assets/presets/NAME/) merges its settings into fable/handoff.json (paths and blocked commands are added to the defaults, never replace them), adds mission and rules sections, installs per-shape mission, ledger and decisions files, and the decisions the owner must answer before launch. `assets/presets/example/` shows the shape.
 - Adjudication under a written schema (the Jev decision framework, disler/ten-levels-of-jev): a named schema, the answer among the options offered, an abstain exit never applied, companion questions, post-checks, a receipt, and confidence bands (auto, review, low).
 - `detective_backtest.py`: `--min-accepted`, a cutoff table, blind adjudications in the verdicts under the threshold the run calibrates.

@@ -184,8 +184,10 @@ def main() -> int:
         return 1
     goals, decisions, opens, findings = analyse(messages(files))
     out = Path(args.out).expanduser() if args.out else RUNS / ("%s_%s" % (datetime.date.today().isoformat(), re.sub(r"[^A-Za-z0-9]+", "-", project.name))) / "INTENT.md"
-    if str(out.resolve()).startswith(str(project) + os.sep) and project != SKILL.parent:
-        print("intent.py writes outside the project (runs/ in the skill package), never inside it.", file=sys.stderr)
+    inside = str(out.resolve()).startswith(str(project) + os.sep)
+    in_package = str(out.resolve()).startswith(str(project / "fable") + os.sep)
+    if inside and not in_package and project != SKILL.parent:
+        print("intent.py writes to the package (fable/) or outside the project (runs/ in the skill package), never into project files.", file=sys.stderr)
         return 2
     out.parent.mkdir(parents=True, exist_ok=True)
     if out.exists():
@@ -193,7 +195,10 @@ def main() -> int:
         return 2
     out.write_text(markdown(project, files, goals, decisions, opens, findings), encoding="utf-8")
     summary = {"out": str(out), "logs": len(files), "goals": len(goals), "decisions": len(decisions), "open": len(opens),
-               "lost_or_regressed": [{"items": f["items"], "status": f["status"]} for f in findings]}
+               "lost_or_regressed": [{"items": f["items"], "status": f["status"], "first": f["first"][3],
+                                      "status_from": f["status_from"][2] if f["status_from"] else None} for f in findings]}
+    # the same findings as data, for the ledger (prepare.py phase 6, findings.py)
+    out.with_suffix(".json").write_text(json.dumps(summary, indent=1) + "\n", encoding="utf-8")
     print(json.dumps(summary, indent=1) if args.json else "Wrote %s: %d finding(s) of lost or regressed data." % (out, len(findings)))
     return 0
 

@@ -1,3 +1,4 @@
+<!-- draft: prepare.py phase 6 completes this -->
 # Mission: MARPA, the weighted averages (stage 2 of 3)
 
 ## Job

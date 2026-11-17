@@ -806,6 +806,15 @@
     "run_pipeline.sh.orig"
    ],
    "why": "the git-ignored data stage 1 and the standard's tests read (loaded NDJSON, the working database, inputs, decoded drawings, archives, receipts, vendor references); a fresh worktree links it from the main checkout with link_shared_data.py"
+  },
+  "require_receipts": true,
+  "writer_lock": {
+   "file": ".writer.lock",
+   "protects": [
+    "farber-dd.duckdb",
+    "*.duckdb"
+   ],
+   "agent_env": "MARPA_AGENT"
   }
  },
  "shapes": {
@@ -948,6 +957,16 @@
       "fable/done/stage2.json",
       "docs/standard/ESTIMATING_DESIGN.md"
      ]
+    },
+    "held_out": {
+     "projects": [
+      "Ulm"
+     ],
+     "answer_paths": [
+      "inputs/Financials/*Ulm*",
+      "inputs/Financials/*ulm*"
+     ],
+     "why": "Ulm's own budget and cost to complete are the answer its estimate is checked against (standard repository decision D181)"
     }
    },
    "mission_note": "MISSION_STAGE3.md",

@@ -891,3 +891,14 @@ def test_full_accounting_is_in_stage_one_and_archive_first_is_gone(tmp_path):
     assert "archive it first" not in rules and "There are no archive copies." in rules
     assert not any(r["kind"] == "marpa-archive-first" for r in cfg["owner_rules"])
     assert {"marpa-live-append-only", "marpa-no-overwrite", "marpa-programmatic"} <= {r["kind"] for r in cfg["owner_rules"]}
+
+
+def test_marpa_drafts_wait_for_phase_six_and_every_task_has_a_check():
+    for shape in ("stage1", "stage2", "stage3"):
+        for name in ("MISSION.md", "STATE.md", "DECISIONS.md"):
+            assert (PRESET_DIR / "shapes" / shape / name).read_text().startswith("<!-- draft: prepare.py phase 6 completes this -->"), (shape, name)
+        tasks = [l for l in (PRESET_DIR / "shapes" / shape / "STATE.md").read_text().splitlines() if l.startswith("- [ ]")]
+        assert tasks and all("(check: `" in t for t in tasks), shape
+    cfg = PRESET["config"]
+    assert cfg["require_receipts"] is True and cfg["writer_lock"]["agent_env"] == "MARPA_AGENT" and "farber-dd.duckdb" in cfg["writer_lock"]["protects"]
+    assert PRESET["shapes"]["stage3"]["config"]["held_out"]["projects"] == ["Ulm"]
