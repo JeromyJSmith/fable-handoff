@@ -10,6 +10,7 @@
 - The guard: named writable files outside the project, companion repositories, and `unreadable_paths` (run output is never a source; Read, Grep, Glob and shell reads are blocked).
 - Question triage words and owner rules from the project's configuration; `decision_interview.py --file`.
 - `scripts/intent.py`: a condensed INTENT.md from the conversation logs, with a section for data lost or regressed and whether each was resolved.
+- `standards_checks`: named commands that gate done beside the verify command; readiness checks each can run, the stop gate requires each to pass. `adjudication_policy.answer_rules`: rules of the standard an adjudicated answer may never break.
 - runs/ holds run output and is never committed. The test suite fails if it changes any path outside the repository and the temporary folders that a preset names.
 
 ## 1.3.1 (2026-11-16)

@@ -362,3 +362,38 @@ def test_intent_finds_lost_data_and_its_resolution(tmp_path):
     assert "Never edit a test to make it pass." in out.read_text()
     again = run([*script("intent.py"), "--project", str(tmp_path / "proj"), "--logs", str(logs), "--out", str(out)])
     assert again.returncode == 2 and "never overwritten" in again.stderr
+
+
+# --------------------------------------------------------------------------- standards checks and answer rules
+
+def test_a_standards_check_gates_done_and_must_be_runnable(tmp_path):
+    from conftest import hook, prepared_project
+    project = prepared_project(tmp_path)
+    write_cfg(project, standards_checks=[{"name": "naming standard", "command": "test -f checks/naming_ok", "why": "every entry follows the naming standard"}])
+    commit_all(project, "standards check")
+    _, data = readiness(project)
+    row = next(r for r in data["rows"] if r["check"] == "standards check")
+    assert row["status"] == "PASS" and "failing now" in row["detail"]
+    write_cfg(project, standards_checks=[{"name": "broken", "command": "uv run --script checks/missing.py"}])
+    commit_all(project, "broken check")
+    _, data = readiness(project)
+    assert next(r for r in data["rows"] if r["check"] == "standards check")["status"] == "FAIL"
+    write_cfg(project, standards_checks=[{"name": "naming standard", "command": "test -f checks/naming_ok", "why": "every entry follows the naming standard"}], verify_command="true")
+    (project / "fable/STATE.md").write_text((project / "fable/STATE.md").read_text().replace("- [ ]", "- [x]"))
+    (project / "fable/REPORT.md").write_text("Done.\n")
+    proc = hook(project, "fable_stop_gate.py", {"session_id": "s", "stop_hook_active": False})
+    assert "the standards check \"naming standard\" fails" in proc.stdout + proc.stderr
+    (project / "checks").mkdir()
+    (project / "checks/naming_ok").write_text("")
+    proc = hook(project, "fable_stop_gate.py", {"session_id": "s", "stop_hook_active": False})
+    assert "standards check" not in proc.stdout + proc.stderr
+
+
+def test_an_adjudicated_answer_may_not_break_a_rule_of_the_standard(tmp_path):
+    cfg = example_config()
+    case = adjudicated_case(answer="n/a", offered=OPTIONS + ["n/a"])
+    case["candidates"] = OPTIONS + ["n/a"]
+    case["evidence"][0]["supports"] = "n/a"
+    result = detective().verdict(case, cfg, tmp_path)
+    assert result["verdict"] == "likely" and "breaks a rule of the standard: every entry has a real name" in result["why"]
+    assert detective().verdict(adjudicated_case(), cfg, tmp_path)["verdict"] == "settled by adjudication"
