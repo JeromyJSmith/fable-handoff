@@ -19,10 +19,16 @@ The numbering standard (binding):
 - Every line is coded with an item and a component.
 - A detective case or an adjudication never creates an item that breaks these rules: the adjudication policy refuses such an answer, and the numbering tests must pass before the run may stop.
 
+Full accounting, no silent spreading:
+
+- Every drawn class has a budget home, or it is listed as unhomed.
+- Every budget line's money is placed on the drawn classes the evidence ties it to, spread by a recorded site-wide rule that is labelled as such, or shown as unplaced with its dollar amount.
+- Conserved money is never reported without the unplaced and unhomed amounts beside it.
+
 Keeping the standard (the owner's rules in CLAUDE.md):
 
 - Take the writer lock before any write to the working database: set MARPA_AGENT to this run's branch name and run writer_lock.py take. If another agent holds it, park the task and continue with work that does not write the database. Release it when you stop writing.
-- Write the database only through run_pipeline.sh or rebuild.sh, which archive it first. Loads go source, NDJSON, jq, transform.jq, DuckDB.
+- The working database is one live, append-only database: a load or a correction adds rows, never overwrites or deletes them. There are no archive copies. Loads go source, NDJSON, jq, transform.jq, DuckDB, through the writer lock.
 - A fix goes everywhere it belongs in one task: the rule or word list, the data, the budget categories, MARPA_STANDARD.md, SPEC.md, DECISIONS.md and HARDENING.md.
 - Class-word grammar: a class name is family, head word and modifiers ("L-Detail Material-Aggregate": family L, head word Aggregate, modifier Detail Material). A modifier changes how the class is read, never what the head word names. One class word is weak evidence; an exact standard term or alias is strong.
 - Adjudication is Jev under a written schema from jev_schemas.yaml: the case records the schema, the options offered, the answer, the confidence, the companions' answers, each post-check and the receipt. An answer below the threshold is kept as the suggestion. The OTHER answer is never applied. The threshold is the measured one in fable/calibration.json.

@@ -507,16 +507,6 @@
     "how": "Old identifiers are kept only for migration; the run writes no old-style code."
    },
    {
-    "kind": "marpa-archive-first",
-    "patterns": [
-     "archive\\*\\* the working database",
-     "archive the working database",
-     "run_pipeline\\.sh. does it"
-    ],
-    "effect": "honored",
-    "how": "Writes to the working database go through run_pipeline.sh or rebuild.sh, which archive it first."
-   },
-   {
     "kind": "marpa-start-from-loaded",
     "patterns": [
      "start from what is loaded",
@@ -598,6 +588,50 @@
     ],
     "effect": "honored",
     "how": "Kept as written; the run reads AGENTS.md, SPEC.md, MARPA_STANDARD.md and HANDOFF.md before it starts."
+   },
+   {
+    "kind": "marpa-live-append-only",
+    "patterns": [
+     "one live, append-only database",
+     "farber-dd\\.duckdb. is the live database",
+     "only ever added",
+     "overwrites or deletes existing rows",
+     "current state is a view of the latest versions",
+     "No archive copies",
+     "never the owner's; it came from an agent-written brief"
+    ],
+    "effect": "honored",
+    "how": "The run appends to the one live database through the writer lock: a load or a correction adds rows, never overwrites or deletes them. It makes no archive copies."
+   },
+   {
+    "kind": "marpa-no-overwrite",
+    "patterns": [
+     "overwriting or deleting takes the owner",
+     "never overwrite, delete, move",
+     "do not overwrite or delete files",
+     "run output .*runs/",
+     "git-ignored and never committed",
+     "runs are read only to find what went",
+     "wrong; each finding is extracted",
+     "is solved, its run output is deleted",
+     "never mine old runs",
+     "chflags",
+     "every session asks before"
+    ],
+    "effect": "honored",
+    "how": "The run never overwrites, deletes or moves a file it did not create; destructive commands are blocked by the guard, run output goes to the ignored runs/ folder and is never read as a source."
+   },
+   {
+    "kind": "marpa-programmatic",
+    "patterns": [
+     "everything is programmatic",
+     "sick of LLMs",
+     "workflow is a Python driver",
+     "never a list of instructions",
+     "no claim of"
+    ],
+    "effect": "honored",
+    "how": "Every calculation and check is code with a receipt; preparation runs through prepare.marimo.py, phase by phase, and readiness requires each phase's receipt."
    }
   ],
   "writable_outside_paths": [
@@ -707,7 +741,8 @@
     "0 model calls in calculations",
     "plain-words questions",
     "documentation current",
-    "the numbering standard holds in every slot: tests/test_numbering_standard.py passes (one item per kind of thing; no component in an item name; credits, add options, revisions, value engineering and change orders are line flags; every item has a real name; every line coded with an item and a component)"
+    "the numbering standard holds in every slot: tests/test_numbering_standard.py passes (one item per kind of thing; no component in an item name; credits, add options, revisions, value engineering and change orders are line flags; every item has a real name; every line coded with an item and a component)",
+    "full accounting: every drawn class has a budget home or is listed as unhomed; every budget line's money is placed by evidence, spread by a recorded and labelled site-wide rule, or shown as unplaced with its dollar amount; the reconciliation has no unhomed class and no unplaced money without a recorded reason, and conserved money is always reported beside the unplaced and unhomed amounts"
    ]
   },
   "deterministic_code": {
@@ -794,7 +829,8 @@
       "0 model calls in calculations",
       "plain-words questions",
       "documentation current",
-      "the numbering standard holds in every slot: tests/test_numbering_standard.py passes (one item per kind of thing; no component in an item name; credits, add options, revisions, value engineering and change orders are line flags; every item has a real name; every line coded with an item and a component)"
+      "the numbering standard holds in every slot: tests/test_numbering_standard.py passes (one item per kind of thing; no component in an item name; credits, add options, revisions, value engineering and change orders are line flags; every item has a real name; every line coded with an item and a component)",
+      "full accounting: every drawn class has a budget home or is listed as unhomed; every budget line's money is placed by evidence, spread by a recorded and labelled site-wide rule, or shown as unplaced with its dollar amount; the reconciliation has no unhomed class and no unplaced money without a recorded reason, and conserved money is always reported beside the unplaced and unhomed amounts"
      ]
     },
     "launch_requires": {

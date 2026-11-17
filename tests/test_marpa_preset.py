@@ -111,7 +111,7 @@ def test_the_preset_verify_command_is_used_when_none_is_given(tmp_path):
     assert "bun run test" not in cfg["verify_command"]
     assert cfg["verify_timeout_seconds"] == 7200
     done = cfg["definition_of_done"]
-    assert done["source"] == "docs/standard/DEFINITION_OF_DONE.md" and done["endpoint"] == "GET /done" and len(done["rows"]) == 11
+    assert done["source"] == "docs/standard/DEFINITION_OF_DONE.md" and done["endpoint"] == "GET /done" and len(done["rows"]) == 12
     assert any("owner-import-2026-11-16" in r for r in done["rows"]) and any("153 uncoded lines" in r for r in done["rows"])
     assert cfg["budget_tolerance"]["held_out_total_pct"] is None and cfg["budget_tolerance"]["evidence_minimum_projects"] is None
     assert cfg["budget_tolerance"]["allocation_unexplained_cents"] == 0
@@ -877,3 +877,17 @@ def test_adjudication_never_creates_an_item_that_breaks_the_numbering_standard(t
     case["evidence"][1]["supports"] = answer
     result = dm.verdict(case, cfg, tmp_path)
     assert ("breaks a rule of the standard" in result["why"]) is breaks, result["why"]
+
+
+def test_full_accounting_is_in_stage_one_and_archive_first_is_gone(tmp_path):
+    # owner, 2026-11-16 (standard repository decisions D187 and D194)
+    project = bare_project(tmp_path)
+    assert init(project, "--preset", "marpa", "--shape", "stage1").returncode == 0
+    cfg = read_cfg(project)
+    assert any(r.startswith("full accounting: every drawn class has a budget home") for r in cfg["definition_of_done"]["rows"])
+    rules = (project / "fable/OPERATING_RULES.md").read_text()
+    assert "Every drawn class has a budget home, or it is listed as unhomed." in rules
+    assert "Conserved money is never reported without the unplaced and unhomed amounts beside it." in rules
+    assert "archive it first" not in rules and "There are no archive copies." in rules
+    assert not any(r["kind"] == "marpa-archive-first" for r in cfg["owner_rules"])
+    assert {"marpa-live-append-only", "marpa-no-overwrite", "marpa-programmatic"} <= {r["kind"] for r in cfg["owner_rules"]}
