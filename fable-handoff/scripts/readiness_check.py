@@ -523,6 +523,53 @@ def check_shared_data(project, config):
     return [("PASS", "shared data", "%d path(s) present%s" % (len(paths), ", %d linked from %s" % (len(linked), spec.get("from")) if linked else ""))]
 
 
+def check_prepared(project, config):
+    """prepare.py's receipts, the spec, the project's detective, the ledger's checks and coverage, no draft left."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("fable_prepare", SCRIPTS / "prepare.py")
+    prep = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = prep   # dataclasses look their module up by name
+    spec.loader.exec_module(prep)
+    rows = []
+    drafts = [rel for rel in ("fable/MISSION.md", "fable/STATE.md", "fable/DECISIONS.md") if prep.DRAFT in (read_text(project / rel) or "")]
+    if drafts:
+        rows.append(("FAIL", "drafts", "%s still marked as a draft: prepare.py phase 6 completes it from the findings" % ", ".join(drafts)))
+    if not config.get("require_receipts"):
+        if not (project / "fable" / "receipts").exists():
+            rows.append(("WARN", "receipts", "no receipts: prepare.py did not prepare this package, so nothing proves discovery, the interview, the done check, the rules audit or the mission writing ran"))
+        return rows
+    problems = []
+    for n in range(7):
+        problems += prep.receipt_problems(project, n)
+    if prep.read_receipt(project, 7) is not None:
+        problems += prep.receipt_problems(project, 7)
+    rows.append(("FAIL", "receipts", "; ".join(problems)) if problems else ("PASS", "receipts", "every phase ran and is current"))
+    if not (project / "fable" / "handoff_spec.json").exists():
+        rows.append(("FAIL", "handoff spec", "fable/handoff_spec.json is missing; prepare.py phase 6 completes and checks it"))
+    if not (project / "fable" / "detective.py").exists():
+        rows.append(("FAIL", "detective", "fable/detective.py is missing; the template is never used in its place"))
+    state = read_text(project / "fable" / "STATE.md") or ""
+    tasks = [l for l in state.splitlines() if l.strip().startswith("- [ ]")]
+    no_check = [t.strip()[6:80] for t in tasks if not prep.CHECK.search(t)]
+    try:
+        findings = json.loads((project / "fable" / "findings.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        findings = None
+    uncovered = [f["id"] for f in findings or [] if f.get("status") == "open" and ("finding %s:" % f["id"]) not in state]
+    if findings is None:
+        rows.append(("FAIL", "ledger coverage", "fable/findings.json is missing; prepare.py phase 6 builds it"))
+    elif no_check or uncovered:
+        detail = []
+        if no_check:
+            detail.append("%d task(s) without a (check: `command`): %s" % (len(no_check), "; ".join(no_check[:3])))
+        if uncovered:
+            detail.append("open finding(s) with no task: %s" % ", ".join(uncovered[:10]))
+        rows.append(("FAIL", "ledger coverage", ". ".join(detail)))
+    else:
+        rows.append(("PASS", "ledger coverage", "%d task(s), each with a check; %d open finding(s), each a task" % (len(tasks), sum(1 for f in findings if f.get("status") == "open"))))
+    return rows
+
+
 def check_companions(config):
     """Each companion repository exists, is on its own run branch (never a release branch) and is clean."""
     rows = []
@@ -879,6 +926,7 @@ def main():
     rows += check_owner_decisions(project, config)
     rows += check_standards(project, config)
     rows += check_shared_data(project, config)
+    rows += check_prepared(project, config)
     rows += branch_rows
     if is_repo:
         rows += check_git_clean(dirty_before, dirty_after, args.allow_dirty)

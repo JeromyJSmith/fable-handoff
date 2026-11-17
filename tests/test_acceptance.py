@@ -19,7 +19,7 @@ from conftest import (
 
 PACKAGE_FILES = [
     "fable/handoff.json", "fable/MISSION.md", "fable/OPERATING_RULES.md", "fable/STATE.md",
-    "fable/DECISIONS.md", "fable/launch.py", "fable/questions.py", "fable/detective.py", ".claude/hooks/fable_guard.py",
+    "fable/DECISIONS.md", "fable/launch.py", "fable/questions.py", "fable/detective.py", "fable/findings.py", ".claude/hooks/fable_guard.py",
     ".claude/hooks/fable_stop_gate.py", ".claude/hooks/fable_session_context.py",
     ".claude/agents/fable-scout.md", ".claude/agents/fable-builder.md",
     ".claude/agents/fable-worker.md", ".claude/agents/fable-specialist.md",
