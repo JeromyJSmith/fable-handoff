@@ -1,0 +1,399 @@
+{
+  "open_questions": [],
+  "answered": [
+    {
+      "topic": "Restore the three allocation method documents",
+      "question": "Should the three allocation method documents be put back to their last committed text?",
+      "what": "Three documents in the allocation engine folder (/Volumes/MARPA/method/allocation): the allowance method, the engine specification and the design-to-cost specification. A test in this skill overwrote them with a single character between 17:54 and 18:18 on 16 November. The test is fixed. Before the overwrite they had 105, 331 and 244 lines, exactly their committed versions, so nothing appears lost.",
+      "why_it_matters": "The run reads these documents to learn how MARPA budgets. While they hold a single character, the run cannot read the method, and the readiness check counts them as present.",
+      "options": [
+        {
+          "choice": "Restore all three from git",
+          "what_happens": "Each file goes back to its committed text with git restore. The 26 other uncommitted changes in that folder are left alone."
+        },
+        {
+          "choice": "Restore from the saved snapshot",
+          "what_happens": "The committed text saved in /Volumes/MARPA/runs/2026-11-16-allocation-x-overwrite-snapshot/head/ is copied back. Same result as git, from the snapshot."
+        },
+        {
+          "choice": "Leave them for now",
+          "what_happens": "Nothing changes. The run must not launch until they are restored, because it would read one character instead of the method."
+        }
+      ],
+      "recommendation": "Restore all three from git",
+      "recommendation_reason": "The line counts show the committed text was the current text, so git restores exactly what was there, and the other uncommitted work in the folder stays untouched.",
+      "why_not_decided": "Writing in the allocation folder is the owner's to allow; this session was asked not to write there.",
+      "would_settle": "The owner saying which way to restore, or to wait.",
+      "evidence": [
+        {
+          "rung": "drawings and models",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "the project's budget",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "the standard and class vocabulary",
+          "searched": "the allocation folder's git history",
+          "found": "the committed versions have 105, 331 and 244 lines, the same as before the overwrite"
+        },
+        {
+          "rung": "rulings and decisions",
+          "searched": "DECISIONS.md and the allocation folder's own decisions",
+          "found": "no rule on restoring files after an accident"
+        },
+        {
+          "rung": "the firm's own words",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "outside standards",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "back-tests on past projects",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        }
+      ],
+      "kind": "judgment",
+      "nature": "policy",
+      "status": "imported",
+      "answer": "Restore all three from git",
+      "answer_reason": "STAND-IN for the rehearsal: the preparing agent recommendation, not the owner answer. What it means: Each file goes back to its committed text with git restore. The 26 other uncommitted changes in that folder are left alone.",
+      "answered": "2026-11-16"
+    },
+    {
+      "topic": "One run or two staged runs",
+      "question": "Should the product be built in one unattended run or in two staged runs?",
+      "what": "The work goes from drawing intake through allowance allocation, weighted averages, held-out estimates and [first new project]'s first estimate, then the slimmed desk app. The skill can prepare it as one run, or as stage 1 (everything up to [first new project]'s estimate, no desk work) followed by stage 2 (the slimmed desk app wired to stage 1).",
+      "why_it_matters": "A single run is simpler to start, but a problem in the desk app can hold up the estimating work. Two stages prove the numbers first, and the desk work starts only once stage 1's done check has passed.",
+      "options": [
+        {
+          "choice": "Two staged runs",
+          "what_happens": "Stage 1 runs first on its own branch; its done check writes a record; the readiness check then allows stage 2, which works on the desk app."
+        },
+        {
+          "choice": "One run",
+          "what_happens": "One run does everything on one branch; its done check needs all fifteen rows of the definition of done, desk included."
+        }
+      ],
+      "recommendation": "Two staged runs",
+      "recommendation_reason": "The estimating numbers are the product's core and can be proven before any desk change, and the readiness check already enforces the order.",
+      "why_not_decided": "How to stage the firm's work is the owner's choice, not a fact in the evidence.",
+      "would_settle": "The owner choosing one of the two shapes.",
+      "nature": "preference",
+      "evidence": [
+        {
+          "rung": "drawings and models",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "the project's budget",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "the standard and class vocabulary",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "rulings and decisions",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "the firm's own words",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "outside standards",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "back-tests on past projects",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        }
+      ],
+      "kind": "judgment",
+      "status": "imported",
+      "answer": "Two staged runs",
+      "answer_reason": "STAND-IN for the rehearsal: the preparing agent recommendation, not the owner answer. What it means: Stage 1 runs first on its own branch; its done check writes a record; the readiness check then allows stage 2, which works on the desk app.",
+      "answered": "2026-11-16"
+    },
+    {
+      "topic": "Where the desk run starts",
+      "question": "From which point should the run branch the desk app repository?",
+      "what": "The desk app repository (/Volumes/MARPA/apps/marpa-desk) is on main with uncommitted work of the owner's. The run works in it only on its own branch, and the readiness check refuses a desk with uncommitted changes. The desk map was made at commit e50a89362.",
+      "why_it_matters": "The run must start from a known, committed state, and the owner's unfinished work must neither be lost nor mixed into the run's changes.",
+      "options": [
+        {
+          "choice": "Commit the owner's work first, then branch",
+          "what_happens": "The owner commits the current changes on main; the run branches from that commit; the desk map is made again for it."
+        },
+        {
+          "choice": "Branch from the mapped commit",
+          "what_happens": "The run branches from commit e50a89362, which the map already covers; the uncommitted work stays where it is, outside the run."
+        },
+        {
+          "choice": "Set the work aside on a branch of its own",
+          "what_happens": "The owner moves the uncommitted work to a branch of its own; main is clean; the run branches from main."
+        }
+      ],
+      "recommendation": "Branch from the mapped commit",
+      "recommendation_reason": "It needs nothing from the owner's unfinished work, the map is already made for that commit, and the owner's changes are not touched.",
+      "why_not_decided": "The uncommitted work is the owner's; only the owner can say whether it belongs in the starting point.",
+      "would_settle": "The owner naming the starting commit, or committing the work.",
+      "evidence": [
+        {
+          "rung": "drawings and models",
+          "searched": "the desk repository's status",
+          "found": "main has uncommitted changes; the last commit is e50a89362"
+        },
+        {
+          "rung": "the project's budget",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "the standard and class vocabulary",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "rulings and decisions",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "the firm's own words",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "outside standards",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "back-tests on past projects",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        }
+      ],
+      "kind": "judgment",
+      "nature": "policy",
+      "status": "imported",
+      "answer": "Branch from the mapped commit",
+      "answer_reason": "STAND-IN for the rehearsal: the preparing agent recommendation, not the owner answer. What it means: The run branches from commit e50a89362, which the map already covers; the uncommitted work stays where it is, outside the run.",
+      "answered": "2026-11-16"
+    },
+    {
+      "topic": "The held-out estimate target",
+      "question": "How close must a held-out estimate of a past project come to that project's real budget total?",
+      "what": "Each past project is estimated from the other projects only, and the estimate's total is compared with the project's real budget total. The definition of done names 10 percent; the earlier result was 13 percent.",
+      "why_it_matters": "This is the main measure of whether the estimating works. Too loose a target lets weak estimates pass; too tight a target may be impossible with the projects the firm has.",
+      "options": [
+        {
+          "choice": "Within 10 percent",
+          "what_happens": "The run is done only when every past project's held-out total is within 10 percent of its real total."
+        },
+        {
+          "choice": "Within 15 percent",
+          "what_happens": "Easier to reach; close to the earlier 13 percent result, so it proves little improvement."
+        },
+        {
+          "choice": "Within 10 percent on average, none worse than 20 percent",
+          "what_happens": "Allows one hard project to miss while holding the firm-wide average to 10 percent."
+        }
+      ],
+      "recommendation": "Within 10 percent",
+      "recommendation_reason": "It is the target already written in the definition of done and is a real improvement on 13 percent.",
+      "why_not_decided": "How much estimating error the firm accepts is the firm's policy.",
+      "would_settle": "The owner confirming or changing the target.",
+      "evidence": [
+        {
+          "rung": "drawings and models",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "the project's budget",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "the standard and class vocabulary",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "rulings and decisions",
+          "searched": "the definition of done",
+          "found": "10 percent is named as the target"
+        },
+        {
+          "rung": "the firm's own words",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "outside standards",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "back-tests on past projects",
+          "searched": "the earlier blind benchmark",
+          "found": "13 percent held-out total error"
+        }
+      ],
+      "kind": "judgment",
+      "nature": "policy",
+      "status": "imported",
+      "answer": "Within 10 percent",
+      "answer_reason": "STAND-IN for the rehearsal: the preparing agent recommendation, not the owner answer. What it means: The run is done only when every past project's held-out total is within 10 percent of its real total.",
+      "answered": "2026-11-16"
+    },
+    {
+      "topic": "The evidence needed for a per-unit estimate",
+      "question": "How much past evidence must a class have before the system prices it by quantity times an average rate?",
+      "what": "When the firm has no allowance for a project, the system estimates by the average cost per unit from past projects (for example dollars per square foot of pavers). Where too few past projects drew and budgeted that class, it falls back to the category's share of the total instead.",
+      "why_it_matters": "Too low a minimum lets one unusual project set a rate; too high a minimum leaves most classes priced only by category share.",
+      "options": [
+        {
+          "choice": "At least three past projects and a quantity basis that matches",
+          "what_happens": "A class needs three projects with compatible units before it gets a per-unit price; others use category shares."
+        },
+        {
+          "choice": "At least two past projects",
+          "what_happens": "More classes get per-unit prices, each resting on less evidence."
+        },
+        {
+          "choice": "At least five past projects",
+          "what_happens": "Per-unit prices only for common classes; most of the budget comes from category shares."
+        }
+      ],
+      "recommendation": "At least three past projects and a quantity basis that matches",
+      "recommendation_reason": "Three is the smallest number that shows a spread instead of one or two points, and the firm has few projects of each kind.",
+      "why_not_decided": "No document names a minimum; how much evidence is enough is the firm's call.",
+      "would_settle": "The owner naming the minimum number of projects.",
+      "evidence": [
+        {
+          "rung": "drawings and models",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "the project's budget",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "the standard and class vocabulary",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "rulings and decisions",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "the firm's own words",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "outside standards",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "back-tests on past projects",
+          "searched": "the allocation engine's allocated projects",
+          "found": "six projects allocated; most classes appear in fewer than four"
+        }
+      ],
+      "kind": "judgment",
+      "nature": "policy",
+      "status": "imported",
+      "answer": "At least three past projects and a quantity basis that matches",
+      "answer_reason": "STAND-IN for the rehearsal: the preparing agent recommendation, not the owner answer. What it means: A class needs three projects with compatible units before it gets a per-unit price; others use category shares.",
+      "answered": "2026-11-16"
+    },
+    {
+      "topic": "Quantity tolerances",
+      "question": "How far may a measured drawing quantity differ from a budgeted quantity and still count as agreeing?",
+      "what": "The detective standard compares the area, length, count or volume measured on the drawing with the quantity on a budget line. The current tolerances are 5 percent for area and length, exact for counts, 10 percent for volume; weight is never compared.",
+      "why_it_matters": "These decide when a drawn quantity counts as strong evidence for a budget line, and how the drawn-against-budgeted view marks a line as agreeing.",
+      "options": [
+        {
+          "choice": "Keep the current tolerances",
+          "what_happens": "Area and length 5 percent, counts exact, volume 10 percent, weight never compared."
+        },
+        {
+          "choice": "Loosen area and length to 10 percent",
+          "what_happens": "More lines agree, including ones where estimators added waste; weaker evidence."
+        }
+      ],
+      "recommendation": "Keep the current tolerances",
+      "recommendation_reason": "They come from how the firm's budgets round and add waste, and the detective standard already uses them.",
+      "why_not_decided": "The tolerances were proposed, not confirmed by the firm.",
+      "would_settle": "The owner confirming or changing them.",
+      "evidence": [
+        {
+          "rung": "drawings and models",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "the project's budget",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "the standard and class vocabulary",
+          "searched": "detective_functions.yaml",
+          "found": "5, 5, exact and 10 percent, with reasons, not yet confirmed by the owner"
+        },
+        {
+          "rung": "rulings and decisions",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "the firm's own words",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "outside standards",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        },
+        {
+          "rung": "back-tests on past projects",
+          "searched": "this rung",
+          "found": "nothing that decides it"
+        }
+      ],
+      "kind": "judgment",
+      "nature": "policy",
+      "status": "imported",
+      "answer": "Keep the current tolerances",
+      "answer_reason": "STAND-IN for the rehearsal: the preparing agent recommendation, not the owner answer. What it means: Area and length 5 percent, counts exact, volume 10 percent, weight never compared.",
+      "answered": "2026-11-16"
+    }
+  ]
+}
