@@ -257,3 +257,83 @@ def stub_calls(stub: Path) -> list[list[str]]:
 @pytest.fixture
 def skill() -> Path:
     return SKILL
+
+
+# --------------------------------------------------------------------------- nothing outside the repo changes
+
+# The suite may write only inside this repository and the temporary folders.
+# Every absolute path the presets name (the allocation engine's documents, a
+# firm's task log, a companion repository) is fingerprinted before the first
+# test and again after the last; any change fails the run, naming the path.
+# FABLE_WATCH_PATHS (separated by the path separator) adds more.
+REPO = Path(__file__).resolve().parent.parent
+
+
+def _absolute_strings(value, out):
+    if isinstance(value, str):
+        for part in value.replace("(", " ").replace(")", " ").split():
+            if part.startswith("/") and len(part) > 1 and not part.startswith(("/tmp", "/private/tmp", "/var/folders")):
+                out.add(part.rstrip(";,"))
+    elif isinstance(value, dict):
+        for v in value.values():
+            _absolute_strings(v, out)
+    elif isinstance(value, list):
+        for v in value:
+            _absolute_strings(v, out)
+    return out
+
+
+def watched_paths() -> list[Path]:
+    found: set[str] = set()
+    shared_logs: set[str] = set()
+    for preset in sorted((SKILL / "assets" / "presets").glob("*/preset.json")):
+        data = json.loads(preset.read_text())
+        _absolute_strings(data, found)
+        # a firm-wide log other agents append to while the suite runs is not watched
+        shared_logs |= {str(Path(x).expanduser()) for x in (data.get("config") or {}).get("writable_outside_paths") or []}
+    found |= {p for p in os.environ.get("FABLE_WATCH_PATHS", "").split(os.pathsep) if p}
+    paths = []
+    for raw in sorted(found):
+        p = Path(raw.replace("*", "")).expanduser()
+        if not p.exists() or str(p).startswith(str(REPO)):
+            continue
+        if p.is_dir():
+            # a directory: its own entries one level down (a whole checkout is too large to hash)
+            paths += sorted(c for c in p.iterdir() if c.is_file())[:400]
+        else:
+            paths.append(p)
+    return [p for p in paths if str(p) not in shared_logs and p.name != ".DS_Store"]
+
+
+def fingerprint(paths: list[Path]) -> dict[str, tuple]:
+    import hashlib
+    out = {}
+    for p in paths:
+        try:
+            st = p.stat()
+            secret = p.name == ".env" or p.name.startswith(".env.")
+            digest = "" if secret or st.st_size > 50_000_000 else hashlib.sha256(p.read_bytes()).hexdigest()
+            out[str(p)] = (st.st_mtime_ns, st.st_size, digest)
+        except OSError:
+            out[str(p)] = None
+    return out
+
+
+def changed(before: dict, after: dict) -> list[str]:
+    return sorted(p for p in set(before) | set(after) if before.get(p) != after.get(p))
+
+
+def pytest_sessionstart(session):
+    session.config._fable_watch = watched_paths()
+    session.config._fable_before = fingerprint(session.config._fable_watch)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    before = getattr(session.config, "_fable_before", None)
+    if before is None:
+        return
+    moved = changed(before, fingerprint(session.config._fable_watch))
+    if moved:
+        sys.stderr.write("\nOUTSIDE WRITE: the suite changed %d path(s) outside the repository and the temporary folders:\n%s\n" % (
+            len(moved), "\n".join("  " + p for p in moved)))
+        session.exitstatus = 1

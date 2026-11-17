@@ -457,6 +457,23 @@ def check_model_calls(project, config):
     return [("PASS", "no model calls", "no language model call in the calculation code")]
 
 
+def check_owner_decisions(project, config):
+    """Decisions the owner must answer before launch (pre_launch_decisions), in plain words."""
+    rel = config.get("pre_launch_decisions")
+    if not rel:
+        return []
+    path = project / rel
+    try:
+        records = json.loads(path.read_text(encoding="utf-8")).get("open_questions", [])
+    except (OSError, ValueError, AttributeError):
+        return [("FAIL", "owner decisions", "%s cannot be read" % rel)]
+    waiting = [q.get("topic") or q.get("question") for q in records if q.get("status", "open") == "open"]
+    if waiting:
+        return [("FAIL", "owner decisions", "%d decision(s) wait on the owner: %s. Ask them in one sitting: uv run --script <skill>/scripts/decision_interview.py --project . --file %s" % (
+            len(waiting), "; ".join(waiting), rel))]
+    return [("PASS", "owner decisions", "%d answered" % len(records))]
+
+
 def check_companions(config):
     """Each companion repository exists, is on its own run branch (never a release branch) and is clean."""
     rows = []
@@ -810,6 +827,7 @@ def main():
     rows += check_launch_requires(project, config)
     rows += check_companions(config)
     rows += check_model_calls(project, config)
+    rows += check_owner_decisions(project, config)
     rows += branch_rows
     if is_repo:
         rows += check_git_clean(dirty_before, dirty_after, args.allow_dirty)

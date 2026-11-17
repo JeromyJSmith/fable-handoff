@@ -338,7 +338,7 @@ PRESET_ADDS = ("protected_paths", "blocked_bash_patterns")
 PRESET_KEYS = (
     "verify_command", "verify_timeout_seconds", "question_system", "decisions_log", "evidence_ladder", "detective_functions",
     "quantity_tolerance", "adjudication_threshold", "adjudication_policy", "question_triage", "owner_rules",
-    "owner_rule_headings", "writable_outside_paths", "audit_accept", "preset", "launch_requires", "companion_repositories", "budget_tolerance", "deterministic_code", "related_locations", "definition_of_done", "final_phase", "shape", "branch",
+    "owner_rule_headings", "writable_outside_paths", "audit_accept", "preset", "launch_requires", "companion_repositories", "budget_tolerance", "deterministic_code", "related_locations", "definition_of_done", "final_phase", "shape", "branch", "pre_launch_decisions",
 ) + PRESET_ADDS
 
 
@@ -367,6 +367,8 @@ def load_preset(name):
     texts = {}
     if shape is not None and shapes[shape].get("mission_note"):
         texts["shape_note"] = (folder / shapes[shape]["mission_note"]).read_text(encoding="utf-8").strip() + "\n"
+    if preset.get("owner_decisions"):
+        texts["owner_decisions"] = (folder / preset["owner_decisions"]).read_text(encoding="utf-8")
     for key in ("mission_section", "operating_rules_section"):
         if preset.get(key):
             texts[key] = (folder / preset[key]).read_text(encoding="utf-8").strip() + "\n"
@@ -496,6 +498,8 @@ def main():
         **CODE_FILES,
         **AGENT_FILES,
     }
+    if preset_texts.get("owner_decisions"):
+        package["fable/owner_decisions.json"] = preset_texts["owner_decisions"]
     created, skipped = [], []
     for rel, source in package.items():
         target = project / rel

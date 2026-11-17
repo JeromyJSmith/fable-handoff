@@ -207,6 +207,7 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="report questions not yet written up well enough to ask; exit 1 if any")
     parser.add_argument("--list", action="store_true", help="show every open decision as it would be asked; ask nothing")
     parser.add_argument("--answers", metavar="FILE", help="take answers from a JSON file instead of asking")
+    parser.add_argument("--file", metavar="PATH", help="read and answer the decisions in this JSON file (for example fable/owner_decisions.json, the decisions a preset asks before launch) instead of the question system")
     parser.add_argument("--json", action="store_true", help="print the result as JSON")
     parser.add_argument("--settle", action="store_true", help="answer the questions the evidence settles (kind \"evidence\" with an answer and its evidence), recorded as decisions by evidence")
     args = parser.parse_args()
@@ -217,7 +218,10 @@ def main() -> int:
     if args.settle:
         return qm.cmd_settle(project, config)
     rungs = qm.rung_names(config)
-    source = pick_source(project, config, qm)
+    if args.file:
+        source = SystemSource(project, dict(config, question_system={"type": "json", "path": args.file}), qm)
+    else:
+        source = pick_source(project, config, qm)
     questions = source.open()
     not_ready = [(q, problems(q, qm, rungs)) for q in questions if problems(q, qm, rungs)]
     ready = [q for q in questions if not problems(q, qm, rungs)]

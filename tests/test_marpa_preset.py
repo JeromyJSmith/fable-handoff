@@ -662,3 +662,42 @@ def test_an_unknown_shape_is_refused(tmp_path):
     proc = init(project, "--preset", "marpa", "--shape", "stage3")
     assert proc.returncode != 0 and "no mission shape 'stage3'" in proc.stderr and "stage1" in proc.stderr
     assert init(project, "--shape", "stage1").returncode != 0
+
+
+# --------------------------------------------------------------------------- the owner's decision packet
+
+def test_the_owner_decision_packet_is_ready_to_ask_and_holds_the_launch_until_answered(tmp_path):
+    project = bare_project(tmp_path)
+    assert init(project, "--preset", "marpa").returncode == 0
+    packet = json.loads((project / "fable/owner_decisions.json").read_text())["open_questions"]
+    assert [q["topic"] for q in packet] == ["Restore the three allocation method documents", "One run or two staged runs",
+                                           "Where the desk run starts", "The held-out estimate target",
+                                           "The evidence needed for a per-unit estimate", "Quantity tolerances"]
+    check = run([*script("decision_interview.py"), "--project", str(project), "--file", "fable/owner_decisions.json", "--check"])
+    assert check.returncode == 0 and "6 open decision(s), 6 ready to ask" in check.stdout, check.stdout + check.stderr
+    git(project, "switch", "-qc", "fable/run-1")
+    commit_all(project, "package")
+    _, data = readiness(project)
+    row = next(r for r in data["rows"] if r["check"] == "owner decisions")
+    assert row["status"] == "FAIL" and "6 decision(s) wait on the owner" in row["detail"] and "One run or two staged runs" in row["detail"]
+    answers = {q["question"]: {"choice": q["recommendation"], "reason": "test"} for q in packet}
+    (tmp_path / "answers.json").write_text(json.dumps(answers))
+    proc = run([*script("decision_interview.py"), "--project", str(project), "--file", "fable/owner_decisions.json", "--answers", str(tmp_path / "answers.json")])
+    assert proc.returncode == 0, proc.stderr
+    commit_all(project, "answered")
+    _, data = readiness(project)
+    assert statuses(data)["owner decisions"] == "PASS"
+
+
+def test_the_outside_write_guard_watches_the_allocation_documents_and_sees_a_change(tmp_path):
+    import conftest
+    watched = {str(p) for p in conftest.watched_paths()}
+    if Path("/Volumes/MARPA/method/allocation/SPEC.md").exists():
+        for name in ("AEC-ALLOWANCE-METHOD.md", "SPEC.md", "DESIGN-TO-COST-SPEC.md"):
+            assert "/Volumes/MARPA/method/allocation/" + name in watched, name
+    target = tmp_path / "watched.md"
+    target.write_text("method\n")
+    before = conftest.fingerprint([target])
+    assert conftest.changed(before, conftest.fingerprint([target])) == []
+    target.write_text("x\n")
+    assert conftest.changed(before, conftest.fingerprint([target])) == [str(target)]
