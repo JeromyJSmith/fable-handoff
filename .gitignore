@@ -5,3 +5,5 @@ __pycache__/
 # Exported from MARPA's own data by export_decided_cases.py on the owner's machine.
 # It names client projects, so it stays out of this public repository.
 fable-handoff/assets/presets/marpa/decided_cases.json
+# Run output from real logs or data that name client projects; kept locally until the owner decides (runs/README.md).
+runs/*-private/

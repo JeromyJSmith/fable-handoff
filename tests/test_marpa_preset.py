@@ -725,3 +725,55 @@ def test_a_shape_is_ready_except_for_the_owners_answers_and_outside_facts(tmp_pa
     for check in ("mission", "ledger", "decisions", "detective functions", "no model calls"):
         assert st[check] == "PASS", (check, next(r for r in data["rows"] if r["check"] == check))
     assert st["owner decisions"] == "FAIL"
+
+
+# --------------------------------------------------------------------------- intent: data lost or regressed
+
+def _log(path, rows):
+    path.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+
+
+def _msg(role, text, ts, session="s1"):
+    return {"type": role, "timestamp": ts, "sessionId": session, "message": {"role": role, "content": text}}
+
+
+def test_intent_finds_lost_data_and_its_resolution(tmp_path):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    _log(logs / "a.jsonl", [
+        _msg("user", "I want every budget line placed. Never edit a test to make it pass.", "2026-11-01T10:00:00Z"),
+        _msg("assistant", "Decided: the slope rule applies per project.", "2026-11-01T10:05:00Z"),
+        _msg("user", "The pipeline changed more: the paver note \"KEEP 2 INCH JOINTS\" and the 12.5% grade are gone.", "2026-11-02T09:00:00Z"),
+        _msg("assistant", "The `fee_layer` table was rebuilt empty and dropped 40 rows.", "2026-11-02T09:05:00Z"),
+        _msg("assistant", "The `fee_layer` table is back: restored from the archive.", "2026-11-02T10:00:00Z"),
+        _msg("user", "Still missing: \"KEEP 2 INCH JOINTS\" was not found in the database.", "2026-11-03T09:00:00Z"),
+    ])
+    out = tmp_path / "out" / "INTENT.md"
+    proc = run([*script("intent.py"), "--project", str(tmp_path / "proj"), "--logs", str(logs), "--out", str(out), "--json"])
+    assert proc.returncode == 0, proc.stderr
+    found = {" ".join(f["items"]): f["status"] for f in json.loads(proc.stdout)["lost_or_regressed"]}
+    assert found["12.5% KEEP 2 INCH JOINTS"] == "still open"
+    assert found["40 rows fee_layer"] == "resolved"
+    text = out.read_text()
+    assert "## Goals and rules, in the owner's words" in text and "Never edit a test to make it pass." in text
+    assert "## Data lost or regressed" in text and "**12.5%, KEEP 2 INCH JOINTS**: still open" in text
+    again = run([*script("intent.py"), "--project", str(tmp_path / "proj"), "--logs", str(logs), "--out", str(out)])
+    assert again.returncode == 2 and "never overwritten" in again.stderr
+
+
+MARPA_LOGS = Path.home() / ".claude/projects/-Volumes-MARPA--New-APP-data-external-marpa-desk-sources-ontology-duckdb"
+
+
+@pytest.mark.skipif(not MARPA_LOGS.is_dir(), reason="the MARPA standard repository's conversation logs are not on this machine")
+def test_intent_on_the_real_logs_finds_the_dropped_ulm_slope_and_sod_note():
+    import datetime
+    stamp = datetime.datetime.now().strftime("%Y-%m-%dT%H%M%S")
+    out = SKILL.parent / "runs" / ("%s_intent-marpa-standard-private" % stamp) / "INTENT.md"
+    proc = run([*script("intent.py"), "--project", str(MARPA), "--logs", str(MARPA_LOGS), "--out", str(out), "--json"], timeout=600)
+    assert proc.returncode == 0, proc.stderr
+    findings = json.loads(proc.stdout)["lost_or_regressed"]
+    joined = [" ".join(f["items"]).lower() for f in findings]
+    assert any("10.7%" in j for j in joined), "the Ulm slope setting (10.7%) was dropped by a pipeline run and must be found"
+    assert any("2 weeks" in j for j in joined), "the \"2 WEEKS\" sod-timing note was dropped by a pipeline run and must be found"
+    text = out.read_text()
+    assert "## Data lost or regressed" in text and "10.7%" in text and "2 WEEKS" in text

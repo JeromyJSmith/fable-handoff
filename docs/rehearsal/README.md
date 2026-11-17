@@ -75,3 +75,17 @@ The ten points in the mission most likely to go wrong, and what the system does 
    - It is relaunched up to 3 times.
    - A true policy question is parked as a BCF topic with its evidence while the work continues.
 10. **The run's diff includes files the tests rewrote** (the two screenshots above). The readiness check refuses until MARPA's repository stops rewriting them. Review the diff for generated files.
+
+## Context and intent
+
+Before the package is finished, the preparing agent writes a condensed INTENT.md from every related conversation log:
+
+```bash
+uv run --script scripts/intent.py --project <MARPA standard repo> --project-logs
+```
+
+It keeps four things in the people's own words: the owner's goals and rules, the decisions, the open problems, and "data lost or regressed". That last section lists each item a conversation reported lost, dropped, gone or emptied, with its first report and whether it was resolved. The output goes to a new, dated folder under the package's `runs/` folder and never overwrites earlier output.
+
+On the real logs, it finds both known losses: the Ulm slope setting (10.7%) and the "2 WEEKS" sod-timing note. Both are still open: the latest messages ask where they now sit in the working database. An integrated test fails unless both are found.
+
+This INTENT.md names client projects, so it is kept on this machine in `runs/<date>_intent-marpa-standard-private/` and not committed, until the owner decides how client data in run output should be kept.
