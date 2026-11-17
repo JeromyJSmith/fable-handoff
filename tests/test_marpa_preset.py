@@ -605,3 +605,33 @@ def test_readiness_refuses_a_desk_that_has_no_map_for_its_commit(tmp_path):
     (desk / ("var/reference/desk-map/2026-11-17_%s/keep-cut.json" % commit)).write_text("{}")
     _, data = readiness(project)
     assert statuses(data)["companion desk map"] == "PASS" and statuses(data)["companion desk"] == "PASS"
+
+
+# --------------------------------------------------------------------------- mission shapes
+
+@pytest.mark.parametrize("shape", ["single", "stage1", "stage2"])
+def test_each_mission_shape_has_its_own_done_check(tmp_path, shape):
+    project = bare_project(tmp_path)
+    proc = run([*script("init_handoff.py"), "--project", str(project), "--preset", "marpa", "--shape", shape, "--apply-settings"])
+    assert proc.returncode == 0, proc.stderr
+    cfg = read_cfg(project)
+    mission = (project / "fable/MISSION.md").read_text()
+    assert cfg["shape"] == shape
+    if shape == "single":
+        assert cfg["branch"] == "fable/run-1" and len(cfg["definition_of_done"]["rows"]) == 15 and "stage" not in cfg["verify_command"]
+        assert cfg["companion_repositories"] and "stage 1 of 2" not in mission
+    if shape == "stage1":
+        assert cfg["branch"] == "fable/marpa-stage1" and cfg["companion_repositories"] == []
+        assert cfg["verify_command"].endswith("done_check.py --check --stage 1") and "bun run test" not in cfg["verify_command"]
+        assert not any(r.startswith("the desk app") for r in cfg["definition_of_done"]["rows"]) and "stage 1 of 2" in mission
+    if shape == "stage2":
+        assert cfg["branch"] == "fable/marpa-stage2" and cfg["verify_command"].endswith("done_check.py --check --stage 2")
+        assert "bun run test" in cfg["verify_command"] and "runs/done/stage1.json" in cfg["launch_requires"]["files"]
+        assert {"takeoff from geometry", "back-test"} <= set(cfg["launch_requires"]["functions_built"]) and "stage 2 of 2" in mission
+
+
+def test_an_unknown_shape_is_refused(tmp_path):
+    project = bare_project(tmp_path)
+    proc = init(project, "--preset", "marpa", "--shape", "stage3")
+    assert proc.returncode != 0 and "no mission shape 'stage3'" in proc.stderr and "stage1" in proc.stderr
+    assert init(project, "--shape", "stage1").returncode != 0

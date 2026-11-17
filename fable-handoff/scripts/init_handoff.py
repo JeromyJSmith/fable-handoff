@@ -130,6 +130,7 @@ def parse_args():
     parser.add_argument("--force", action="store_true", help="overwrite existing package files, including a mission and ledger you have filled in. Commit first.")
     parser.add_argument("--from-preflight", action="store_true", help="use fable/preflight.json from preflight.py: its verify command when --verify-command is not given, its paths to protect, and its open acceptance criteria as the first tasks in fable/STATE.md. Check each before launch.")
     parser.add_argument("--preset", default=None, metavar="NAME", help="merge a firm's preset from assets/presets/NAME/ (for example marpa) into fable/handoff.json and the mission and rules. Options given on the command line win over the preset.")
+    parser.add_argument("--shape", default=None, metavar="NAME", help="with --preset: one of the preset's mission shapes (for MARPA: single, stage1, stage2)")
     parser.add_argument("--question-system", default=None, metavar="TYPE:WHERE",
                         help="where questions for the owner live: json:<path> (default fable/open_decisions.json), bcf:<path to .bcf>, markdown:<path to the decisions file>, or github:<owner/repo>")
     parser.add_argument("--decisions-log", default=None, metavar="PATH", help="the project's own decisions log; decisions are written there instead of fable/DECISIONS.md")
@@ -337,7 +338,7 @@ PRESET_ADDS = ("protected_paths", "blocked_bash_patterns")
 PRESET_KEYS = (
     "verify_command", "verify_timeout_seconds", "question_system", "decisions_log", "evidence_ladder", "detective_functions",
     "quantity_tolerance", "adjudication_threshold", "adjudication_policy", "question_triage", "owner_rules",
-    "owner_rule_headings", "writable_outside_paths", "audit_accept", "preset", "launch_requires", "companion_repositories", "budget_tolerance", "deterministic_code", "related_locations", "definition_of_done", "final_phase",
+    "owner_rule_headings", "writable_outside_paths", "audit_accept", "preset", "launch_requires", "companion_repositories", "budget_tolerance", "deterministic_code", "related_locations", "definition_of_done", "final_phase", "shape", "branch",
 ) + PRESET_ADDS
 
 
@@ -355,7 +356,17 @@ def load_preset(name):
     unknown = sorted(set(preset.get("config", {})) - set(PRESET_KEYS))
     if unknown:
         fail("Preset %r sets keys init does not know: %s." % (name, ", ".join(unknown)))
+    shapes = preset.get("shapes") or {}
+    shape = getattr(load_preset, "shape", None)
+    if shapes and shape is None:
+        shape = "single" if "single" in shapes else None
+    if shape is not None:
+        if shape not in shapes:
+            fail("Preset %r has no mission shape %r. Shapes: %s." % (name, shape, ", ".join(sorted(shapes)) or "none"))
+        preset = dict(preset, config=dict(preset.get("config") or {}, **(shapes[shape].get("config") or {}), shape=shape))
     texts = {}
+    if shape is not None and shapes[shape].get("mission_note"):
+        texts["shape_note"] = (folder / shapes[shape]["mission_note"]).read_text(encoding="utf-8").strip() + "\n"
     for key in ("mission_section", "operating_rules_section"):
         if preset.get(key):
             texts[key] = (folder / preset[key]).read_text(encoding="utf-8").strip() + "\n"
@@ -364,7 +375,7 @@ def load_preset(name):
 
 def apply_preset(config, preset, args):
     """Merge a preset into the config. Command line options the user gave win."""
-    given = {"verify_command": bool(args.verify_command), "question_system": args.question_system is not None,
+    given = {"verify_command": bool(args.verify_command), "question_system": args.question_system is not None, "branch": args.branch != "fable/run-1",
              "decisions_log": args.decisions_log is not None, "verify_timeout_seconds": args.verify_timeout is not None}
     for key, value in (preset.get("config") or {}).items():
         if given.get(key):
@@ -452,6 +463,9 @@ def main():
             except (ValueError, KeyError, TypeError):
                 pass
 
+    if args.shape and not args.preset:
+        fail("--shape needs --preset.")
+    load_preset.shape = args.shape
     preset, preset_texts = load_preset(args.preset) if args.preset else ({}, {})
     draft = load_preflight(project) if args.from_preflight else {}
     if draft and not args.verify_command and draft.get("verify_command"):
@@ -464,7 +478,7 @@ def main():
         rules += "\n" + preset_texts["operating_rules_section"]
     mission = (ASSETS / "templates" / "MISSION.md").read_text(encoding="utf-8")
     if preset_texts.get("mission_section"):
-        section = preset_texts["mission_section"] + "\n"
+        section = preset_texts["mission_section"] + "\n" + (("\n" + preset_texts["shape_note"] + "\n") if preset_texts.get("shape_note") else "")
         mission = mission.replace("\n## Done\n", "\n" + section + "\n## Done\n", 1) if "\n## Done\n" in mission else mission.rstrip() + "\n\n" + section
     config = build_config(args, verify_timeout, draft.get("protected_paths", []))
     if preset:

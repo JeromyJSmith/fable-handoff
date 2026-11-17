@@ -733,5 +733,109 @@
     "it uses the host agent's model and is token-heavy: state the expected cost and get the owner's yes first"
    ]
   }
+ },
+ "shapes": {
+  "single": {
+   "about": "One run from drawing intake to the slimmed desk app.",
+   "config": {},
+   "mission_note": null
+  },
+  "stage1": {
+   "about": "Stage 1, the preflight: intake, allocation, averages and sliders, held-out estimates, Solomon. No desk work.",
+   "config": {
+    "branch": "fable/marpa-stage1",
+    "companion_repositories": [],
+    "verify_command": "test -f docs/standard/DEFINITION_OF_DONE.md && uv run pytest -q tests && (cd /Volumes/MARPA/method/allocation && UV_PROJECT_ENVIRONMENT=$HOME/worktrees/_env/marpa-allocation uv run --no-sync pytest -q) && test -f done_check.py && uv run done_check.py --check --stage 1",
+    "definition_of_done": {
+     "source": "docs/standard/DEFINITION_OF_DONE.md",
+     "endpoint": "GET /done",
+     "check": "done_check.py --check --stage 1; on success it writes runs/done/stage1.json",
+     "rows": [
+      "drawing intake 100% decoded",
+      "every class placed",
+      "every line in an item",
+      "allocation with 0 unexplained cents and 0 duplicated money",
+      "full dispositions",
+      "benchmarks with cohort and spread",
+      "held-out total error within 10% (earlier baseline 13%)",
+      "sliders matching their equations",
+      "no takeoff-style estimate below the evidence minimum",
+      "Solomon done",
+      "0 model calls in calculations",
+      "plain-words questions",
+      "documentation current",
+      "the founder-free walkthrough"
+     ]
+    },
+    "launch_requires": {
+     "functions_built": [
+      "name match",
+      "drawing content",
+      "text on the drawing",
+      "budget match",
+      "rules and precedent",
+      "adjudication"
+     ],
+     "functions_first_tasks": [
+      "takeoff from geometry",
+      "spatial relationships",
+      "back-test"
+     ],
+     "files": [
+      "docs/standard/PRODUCT_GOALS.md",
+      "docs/standard/DEFINITION_OF_DONE.md",
+      "/Volumes/MARPA/method/allocation/AEC-ALLOWANCE-METHOD.md",
+      "/Volumes/MARPA/method/allocation/SPEC.md",
+      "/Volumes/MARPA/method/allocation/DESIGN-TO-COST-SPEC.md",
+      "docs/standard/SYSTEM.md",
+      "vwx/WORKFLOW.md",
+      "vwx/run_vwx.sh",
+      "intake.py",
+      "docs/standard/ESTIMATING_DESIGN.md"
+     ]
+    }
+   },
+   "mission_note": "MISSION_STAGE1.md"
+  },
+  "stage2": {
+   "about": "Stage 2, the slimmed desk app wired to the stage 1 preflight. Launches only after stage 1 is done.",
+   "config": {
+    "branch": "fable/marpa-stage2",
+    "verify_command": "test -f docs/standard/DEFINITION_OF_DONE.md && uv run pytest -q tests && (cd /Volumes/MARPA/apps/marpa-desk && bun run test) && test -f done_check.py && uv run done_check.py --check --stage 2",
+    "definition_of_done": {
+     "source": "docs/standard/DEFINITION_OF_DONE.md",
+     "endpoint": "GET /done",
+     "check": "done_check.py --check --stage 2",
+     "rows": [
+      "the desk app builds, its budget section works unchanged, brand tokens only, end-to-end walkthrough passes",
+      "every class placed",
+      "0 model calls in calculations",
+      "plain-words questions",
+      "documentation current",
+      "the founder-free walkthrough"
+     ]
+    },
+    "launch_requires": {
+     "functions_built": [
+      "name match",
+      "drawing content",
+      "text on the drawing",
+      "budget match",
+      "rules and precedent",
+      "adjudication",
+      "takeoff from geometry",
+      "back-test"
+     ],
+     "functions_first_tasks": [],
+     "files": [
+      "docs/standard/PRODUCT_GOALS.md",
+      "docs/standard/DEFINITION_OF_DONE.md",
+      "docs/standard/DESK_REVISION_PLAN.md",
+      "runs/done/stage1.json"
+     ]
+    }
+   },
+   "mission_note": "MISSION_STAGE2.md"
+  }
  }
 }
