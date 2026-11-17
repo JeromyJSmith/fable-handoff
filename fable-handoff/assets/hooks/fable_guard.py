@@ -217,7 +217,14 @@ def load_config(project):
             blocked.append((pattern, re.compile(pattern, re.IGNORECASE)))
         except (re.error, TypeError) as error:
             raise ValueError("invalid regex %r in blocked_bash_patterns: %s" % (pattern, error))
-    return Protected(paths), blocked, bool(config.get("allow_writes_outside_project", False))
+    if config.get("allow_writes_outside_project", False) is True:
+        return Protected(paths), blocked, True
+    # Named files outside the project the owner's rules require the run to
+    # write (for example a firm-wide task log). Exact files only, no globs.
+    named = config.get("writable_outside_paths") or []
+    if not isinstance(named, list):
+        raise ValueError("writable_outside_paths must be a list of file paths")
+    return Protected(paths), blocked, [os.path.realpath(os.path.expanduser(str(x))) for x in named if str(x).strip()]
 
 
 # --------------------------------------------------------------- paths
@@ -235,7 +242,10 @@ def relative_to_project(project, path, base):
 def check_file_write(project, protected, allow_outside, path, base):
     rel = relative_to_project(project, os.path.expanduser(path), base)
     if rel is None:
-        if allow_outside:
+        if allow_outside is True:
+            return
+        full = os.path.realpath(os.path.join(base, os.path.expanduser(path)))
+        if isinstance(allow_outside, list) and full in allow_outside:
             return
         block(
             "%s is outside the project, and this run may only write inside it." % path,

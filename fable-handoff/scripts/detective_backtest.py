@@ -13,7 +13,10 @@ candidates, evidence from registered functions) plus:
   the email, the rule). These are removed before the verdict is computed, so
   the test is blind: no function may "find" the very ruling it is tested on.
 - "adjudication" (optional): an adjudicator's answer and confidence, to
-  calibrate the threshold.
+  calibrate the threshold. When it is marked "blind": true (the adjudicator
+  was asked with the case's own ruling left out of its evidence, as MARPA asks
+  Jev for its blind test), it also takes part in the verdicts, under the
+  threshold this run calibrates. Otherwise it is removed before the verdict.
 
 Output (fable/BACKTEST.md and fable/backtest.json):
 
@@ -22,7 +25,9 @@ Output (fable/BACKTEST.md and fable/backtest.json):
   settled wrongly, and how often it stayed open;
 - every wrong verdict, with the evidence that led to it;
 - adjudication calibration: accuracy by confidence band, and the lowest
-  confidence at which adjudications were right at least --target of the time.
+  confidence at which at least --min-accepted adjudications were right at
+  least --target of the time (the Jev framework's confidence gate, measured
+  rather than assumed).
   With --write-calibration that threshold goes to fable/calibration.json,
   which the verdict rules then use instead of the uncalibrated default.
 
@@ -56,10 +61,12 @@ def blind(case: dict) -> tuple[dict, int]:
     """The case without any evidence drawn from its own ruling."""
     ruling = {str(s).strip() for s in case.get("ruling_sources") or []}
     kept = [e for e in case.get("evidence") or [] if str(e.get("source") or "").strip() not in ruling]
-    return dict(case, evidence=kept, adjudication=None), len(case.get("evidence") or []) - len(kept)
+    adj = case.get("adjudication")
+    adj = adj if isinstance(adj, dict) and adj.get("blind") is True else None
+    return dict(case, evidence=kept, adjudication=adj), len(case.get("evidence") or []) - len(kept)
 
 
-def calibrate(pairs: list[tuple[float, bool]], target: float) -> dict:
+def calibrate(pairs: list[tuple[float, bool]], target: float, min_accepted: int = 1) -> dict:
     bands = {}
     for conf, right in pairs:
         band = min(int(conf * 10), 9) / 10
@@ -70,10 +77,14 @@ def calibrate(pairs: list[tuple[float, bool]], target: float) -> dict:
     threshold = None
     for cut in sorted({c for c, _ in pairs}):
         above = [right for c, right in pairs if c >= cut]
-        if above and sum(above) / len(above) >= target:
+        if len(above) >= max(1, min_accepted) and sum(above) / len(above) >= target:
             threshold = cut
             break
-    return {"bands": table, "threshold": threshold, "target": target, "n": len(pairs)}
+    cutoffs = []
+    for cut in (0.5, 0.6, 0.7, 0.8, 0.9):
+        above = [right for c, right in pairs if c >= cut]
+        cutoffs.append({"cutoff": cut, "accepted": len(above), "right": sum(above), "accuracy": round(sum(above) / len(above), 3) if above else None})
+    return {"bands": table, "cutoffs": cutoffs, "threshold": threshold, "target": target, "min_accepted": min_accepted, "n": len(pairs)}
 
 
 def main() -> int:
@@ -81,6 +92,7 @@ def main() -> int:
     parser.add_argument("--project", required=True)
     parser.add_argument("--cases", required=True, help="JSON list of decided cases")
     parser.add_argument("--target", type=float, default=0.9, help="accuracy an adjudication threshold must reach (default 0.9)")
+    parser.add_argument("--min-accepted", type=int, default=1, help="fewest adjudications that must clear a threshold for it to count (MARPA uses 10)")
     parser.add_argument("--write-calibration", action="store_true", help="write the calibrated threshold to fable/calibration.json")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
@@ -89,9 +101,23 @@ def main() -> int:
     config = dm.load_config(project)
     decided = json.loads(Path(args.cases).read_text(encoding="utf-8"))
 
+    # First pass: the adjudications, to calibrate the threshold before any
+    # verdict uses it.
+    adjudications = []
+    for case in decided:
+        adj = case.get("adjudication")
+        if isinstance(adj, dict) and isinstance(adj.get("confidence"), (int, float)):
+            adjudications.append((float(adj["confidence"]), adj.get("answer") == case.get("owner_answer")))
+    calibration = calibrate(adjudications, args.target, args.min_accepted) if adjudications else None
+    if calibration and calibration["threshold"] is not None:
+        config = dict(config, backtest_threshold=calibration["threshold"])
+    elif calibration:
+        config = dict(config, backtest_threshold=1.01)  # nothing calibrated: adjudication settles nothing
+
     per_function: dict[str, list[int]] = {}
     outcome = {"right": 0, "wrong": 0, "open": 0, "invalid": 0}
-    wrong, removed_total, adjudications = [], 0, []
+    adjudicated = {"right": 0, "wrong": 0}
+    wrong, removed_total = [], 0
     for case in decided:
         truth = case.get("owner_answer")
         test, removed = blind(case)
@@ -109,18 +135,18 @@ def main() -> int:
             outcome["open"] += 1
         elif result["answer"] == truth:
             outcome["right"] += 1
+            if result["verdict"] == "settled by adjudication":
+                adjudicated["right"] += 1
         else:
             outcome["wrong"] += 1
+            if result["verdict"] == "settled by adjudication":
+                adjudicated["wrong"] += 1
             wrong.append({"case": case.get("id") or case.get("question"), "verdict": result["verdict"], "answer": result["answer"],
                           "owner_answer": truth, "why": result["why"]})
-        adj = case.get("adjudication")
-        if isinstance(adj, dict) and isinstance(adj.get("confidence"), (int, float)):
-            adjudications.append((float(adj["confidence"]), adj.get("answer") == truth))
 
     functions = [{"function": f, "used": n, "right": r, "accuracy": round(r / n, 3) if n else None}
                  for f, (n, r) in sorted(per_function.items(), key=lambda kv: (kv[1][1] / kv[1][0]) if kv[1][0] else 0)]
-    calibration = calibrate(adjudications, args.target) if adjudications else None
-    report = {"date": datetime.date.today().isoformat(), "cases": len(decided), "outcome": outcome,
+    report = {"date": datetime.date.today().isoformat(), "cases": len(decided), "outcome": outcome, "settled_by_adjudication": adjudicated,
               "settled_accuracy": round(outcome["right"] / (outcome["right"] + outcome["wrong"]), 3) if outcome["right"] + outcome["wrong"] else None,
               "evidence_removed_as_the_cases_own_ruling": removed_total, "functions": functions, "wrong": wrong, "calibration": calibration}
     fable = project / "fable"
@@ -129,7 +155,8 @@ def main() -> int:
     lines = ["# Detective back-test", "",
              "%d decided case(s), run blind: %d piece(s) of evidence drawn from each case's own ruling were removed first." % (len(decided), removed_total), "",
              "Verdicts: %d reached the owner's answer, %d settled on a different answer, %d stayed open, %d were invalid." % (
-                 outcome["right"], outcome["wrong"], outcome["open"], outcome["invalid"]), "", "## Functions", "",
+                 outcome["right"], outcome["wrong"], outcome["open"], outcome["invalid"]),
+             "Of those, settled by adjudication: %d right, %d wrong." % (adjudicated["right"], adjudicated["wrong"]), "", "## Functions", "",
              "| Function | Used | Right | Accuracy |", "| --- | --- | --- | --- |"]
     lines += ["| %s | %d | %d | %s |" % (f["function"], f["used"], f["right"], f["accuracy"]) for f in functions]
     lines += ["", "A function that is often wrong is weakened in the registry or fixed, never trusted.", ""]
@@ -139,9 +166,12 @@ def main() -> int:
     if calibration:
         lines += ["## Adjudication calibration", "", "| Confidence | Cases | Right | Accuracy |", "| --- | --- | --- | --- |"]
         lines += ["| %.1f to %.1f | %d | %d | %.3f |" % (b["from"], b["to"], b["n"], b["right"], b["accuracy"]) for b in calibration["bands"]]
-        lines += ["", "Lowest confidence with at least %.0f%% right: %s." % (args.target * 100, calibration["threshold"] if calibration["threshold"] is not None else "none; do not let adjudication settle cases yet"), ""]
+        lines += ["", "| Cutoff | Accepted | Right | Accuracy |", "| --- | --- | --- | --- |"]
+        lines += ["| %.1f | %d | %d | %s |" % (c["cutoff"], c["accepted"], c["right"], c["accuracy"]) for c in calibration["cutoffs"]]
+        lines += ["", "Lowest confidence with at least %d answers at least %.0f%% right: %s." % (
+            max(1, args.min_accepted), args.target * 100, calibration["threshold"] if calibration["threshold"] is not None else "none; do not let adjudication settle cases yet"), ""]
         if args.write_calibration and calibration["threshold"] is not None:
-            (fable / "calibration.json").write_text(json.dumps({"threshold": calibration["threshold"], "target": args.target,
+            (fable / "calibration.json").write_text(json.dumps({"threshold": calibration["threshold"], "target": args.target, "min_accepted": args.min_accepted,
                                                                 "cases": calibration["n"], "date": report["date"]}, indent=2) + "\n", encoding="utf-8")
             lines.append("Written to fable/calibration.json; the verdict rules now use it.")
     (fable / "BACKTEST.md").write_text("\n".join(lines) + "\n", encoding="utf-8")

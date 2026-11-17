@@ -2,3 +2,6 @@ __pycache__/
 .pytest_cache/
 .venv/
 *.skill
+# Exported from MARPA's own data by export_decided_cases.py on the owner's machine.
+# It names client projects, so it stays out of this public repository.
+fable-handoff/assets/presets/marpa/decided_cases.json

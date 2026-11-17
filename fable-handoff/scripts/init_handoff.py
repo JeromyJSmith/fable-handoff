@@ -129,7 +129,8 @@ def parse_args():
     parser.add_argument("--ownership", action="store_true", help="tell the model the codebase is its own, so that it refactors as it goes. Leave off for client or shared code.")
     parser.add_argument("--force", action="store_true", help="overwrite existing package files, including a mission and ledger you have filled in. Commit first.")
     parser.add_argument("--from-preflight", action="store_true", help="use fable/preflight.json from preflight.py: its verify command when --verify-command is not given, its paths to protect, and its open acceptance criteria as the first tasks in fable/STATE.md. Check each before launch.")
-    parser.add_argument("--question-system", default="json:fable/open_decisions.json", metavar="TYPE:WHERE",
+    parser.add_argument("--preset", default=None, metavar="NAME", help="merge a firm's preset from assets/presets/NAME/ (for example marpa) into fable/handoff.json and the mission and rules. Options given on the command line win over the preset.")
+    parser.add_argument("--question-system", default=None, metavar="TYPE:WHERE",
                         help="where questions for the owner live: json:<path> (default fable/open_decisions.json), bcf:<path to .bcf>, markdown:<path to the decisions file>, or github:<owner/repo>")
     parser.add_argument("--decisions-log", default=None, metavar="PATH", help="the project's own decisions log; decisions are written there instead of fable/DECISIONS.md")
     parser.add_argument("--apply-settings", action="store_true", help="write the .claude/settings.json change shown in the diff without asking. Without it, an interactive terminal is asked, and anything else gets the diff and fable/settings.proposed.json, with settings left untouched.")
@@ -329,6 +330,52 @@ def default_ladder():
     return template_module("questions").DEFAULT_LADDER
 
 
+PRESETS = ASSETS / "presets"
+# Keys a preset may set. Lists of paths and patterns are added to the
+# defaults, never put in their place, so a preset cannot loosen the guard.
+PRESET_ADDS = ("protected_paths", "blocked_bash_patterns")
+PRESET_KEYS = (
+    "verify_command", "verify_timeout_seconds", "question_system", "decisions_log", "evidence_ladder", "detective_functions",
+    "quantity_tolerance", "adjudication_threshold", "adjudication_policy", "question_triage", "owner_rules",
+    "owner_rule_headings", "writable_outside_paths", "audit_accept", "preset",
+) + PRESET_ADDS
+
+
+def load_preset(name):
+    """The preset's settings and the extra text it adds to the mission and the rules."""
+    folder = PRESETS / name
+    path = folder / "preset.json"
+    if not path.exists():
+        known = sorted(p.name for p in PRESETS.iterdir() if (p / "preset.json").exists()) if PRESETS.exists() else []
+        fail("There is no preset %r. Presets: %s." % (name, ", ".join(known) or "none"))
+    try:
+        preset = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as error:
+        fail("%s is not valid JSON: %s" % (path, error))
+    unknown = sorted(set(preset.get("config", {})) - set(PRESET_KEYS))
+    if unknown:
+        fail("Preset %r sets keys init does not know: %s." % (name, ", ".join(unknown)))
+    texts = {}
+    for key in ("mission_section", "operating_rules_section"):
+        if preset.get(key):
+            texts[key] = (folder / preset[key]).read_text(encoding="utf-8").strip() + "\n"
+    return preset, texts
+
+
+def apply_preset(config, preset, args):
+    """Merge a preset into the config. Command line options the user gave win."""
+    given = {"verify_command": bool(args.verify_command), "question_system": args.question_system is not None,
+             "decisions_log": args.decisions_log is not None, "verify_timeout_seconds": args.verify_timeout is not None}
+    for key, value in (preset.get("config") or {}).items():
+        if given.get(key):
+            continue
+        if key in PRESET_ADDS:
+            config[key] = list(config.get(key) or []) + [x for x in value if x not in (config.get(key) or [])]
+        else:
+            config[key] = value
+    return config
+
+
 def build_config(args, verify_timeout, extra_protected=()):
     protected = list(DEFAULT_PROTECTED_PATHS) + [p for p in extra_protected if p not in DEFAULT_PROTECTED_PATHS]
     return {
@@ -350,7 +397,7 @@ def build_config(args, verify_timeout, extra_protected=()):
         "max_turns": None,
         "audit_accept": [],
         "evidence_ladder": default_ladder(),
-        "question_system": question_system(args.question_system),
+        "question_system": question_system(args.question_system or "json:fable/open_decisions.json"),
         "decisions_log": args.decisions_log,
         "detective_functions": template_module("detective").DEFAULT_FUNCTIONS,
         "quantity_tolerance": {"default_pct": 2.0},
@@ -405,6 +452,7 @@ def main():
             except (ValueError, KeyError, TypeError):
                 pass
 
+    preset, preset_texts = load_preset(args.preset) if args.preset else ({}, {})
     draft = load_preflight(project) if args.from_preflight else {}
     if draft and not args.verify_command and draft.get("verify_command"):
         args.verify_command = draft["verify_command"]
@@ -412,11 +460,22 @@ def main():
 
     rules = (ASSETS / "templates" / "OPERATING_RULES.md").read_text(encoding="utf-8")
     rules = rules.replace("{{OWNERSHIP_BLOCK}}", OWNERSHIP_BLOCK if args.ownership else "").rstrip() + "\n"
+    if preset_texts.get("operating_rules_section"):
+        rules += "\n" + preset_texts["operating_rules_section"]
+    mission = (ASSETS / "templates" / "MISSION.md").read_text(encoding="utf-8")
+    if preset_texts.get("mission_section"):
+        section = preset_texts["mission_section"] + "\n"
+        mission = mission.replace("\n## Done\n", "\n" + section + "\n## Done\n", 1) if "\n## Done\n" in mission else mission.rstrip() + "\n\n" + section
+    config = build_config(args, verify_timeout, draft.get("protected_paths", []))
+    if preset:
+        config = apply_preset(config, preset, args)
+        if "verify_timeout_seconds" in (preset.get("config") or {}) and args.verify_timeout is None:
+            verify_timeout = int(config["verify_timeout_seconds"])
 
     # Target path in the project -> text to write, or the file to copy.
     package = {
-        "fable/handoff.json": json.dumps(build_config(args, verify_timeout, draft.get("protected_paths", [])), indent=2) + "\n",
-        "fable/MISSION.md": ASSETS / "templates" / "MISSION.md",
+        "fable/handoff.json": json.dumps(config, indent=2) + "\n",
+        "fable/MISSION.md": mission,
         "fable/OPERATING_RULES.md": rules,
         "fable/STATE.md": state_text,
         "fable/DECISIONS.md": ASSETS / "templates" / "DECISIONS.md",

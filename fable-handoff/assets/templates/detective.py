@@ -152,6 +152,8 @@ def registry_problems(config: dict, project: Path | None = None) -> list[str]:
 
 def threshold(project: Path, config: dict) -> tuple[float, str]:
     """The adjudication threshold: calibrated by detective_backtest.py when it has run."""
+    if isinstance(config.get("backtest_threshold"), (int, float)):
+        return float(config["backtest_threshold"]), "calibrated by this back-test run"
     path = project / "fable" / "calibration.json"
     try:
         cal = json.loads(path.read_text(encoding="utf-8"))
@@ -171,7 +173,16 @@ UNITS = {
     "sy": ("area", 0.83612736), "m2": ("area", 1.0), "sqm": ("area", 1.0), "ac": ("area", 4046.8564224), "acre": ("area", 4046.8564224),
     "lf": ("length", 0.3048), "ft": ("length", 0.3048), "in": ("length", 0.0254), "m": ("length", 1.0), "mm": ("length", 0.001), "yd": ("length", 0.9144),
     "cy": ("volume", 0.764554858), "yd3": ("volume", 0.764554858), "cf": ("volume", 0.0283168466), "ft3": ("volume", 0.0283168466), "m3": ("volume", 1.0),
-    "ea": ("count", 1.0), "each": ("count", 1.0), "count": ("count", 1.0),
+    "ea": ("count", 1.0), "each": ("count", 1.0), "count": ("count", 1.0), "pcs": ("count", 1.0), "pc": ("count", 1.0),
+    # Weight (base kg). A US short ton is 2,000 lb.
+    "ton": ("weight", 907.18474), "tons": ("weight", 907.18474), "tn": ("weight", 907.18474), "lb": ("weight", 0.45359237),
+    "lbs": ("weight", 0.45359237), "kg": ("weight", 1.0), "t": ("weight", 1000.0),
+    # Units that count containers, not items. A flat or a pallet holds a
+    # number of plants or stones that varies by grower and product, so they
+    # are their own dimension and never compare with each.
+    "flat": ("flat", 1.0), "flats": ("flat", 1.0), "pallet": ("pallet", 1.0), "pallets": ("pallet", 1.0),
+    "sq yd": ("area", 0.83612736), "yd2": ("area", 0.83612736),
+    "ls": ("lump sum", 1.0), "lump sum": ("lump sum", 1.0), "allow": ("lump sum", 1.0), "allowance": ("lump sum", 1.0),
 }
 
 
@@ -188,12 +199,89 @@ def quantity_agrees(q: dict, config: dict) -> tuple[bool, str]:
     if da != db:
         return False, "%s and %s measure different things" % (ua, ub)
     tolerances = config.get("quantity_tolerance") or {}
+    if da in tolerances and tolerances[da] is None:
+        # A dimension the project never measures from its drawings (for
+        # example weight) is never compared, so it can never count as strong.
+        return False, "%s is never compared (quantity_tolerance %s is null)" % (da, da)
+    if da == "lump sum":
+        return False, "a lump sum has no quantity to compare"
     pct = float(tolerances.get(da, tolerances.get("default_pct", 2.0)))
     base_a, base_b = a * fa, b * fb
     if base_a == base_b == 0:
         return True, "both zero"
     off = abs(base_a - base_b) / max(abs(base_a), abs(base_b)) * 100
     return off <= pct, "%.4g %s against %.4g %s: %.2f%% apart, tolerance %.4g%%" % (a, ua, b, ub, off, pct)
+
+
+# --------------------------------------------------------------------------- adjudication (the Jev decision framework)
+
+# The adjudicator's answer is one typed decision under a written schema, in the
+# pattern of TypeSafe's Jev and disler/ten-levels-of-jev:
+#   - schema first: the decision has a written schema before it is asked
+#     ("adjudication_schemas" in handoff.json); no schema, no adjudication;
+#   - it cannot invent an option: the answer must be one of the options offered;
+#   - an exit ("abstain" option) may be offered and is never applied;
+#   - companions: yes/no questions asked in the same call; one at or above
+#     "escalate_noul" (for example "is the evidence too thin?") sends the
+#     answer to review whatever its confidence;
+#   - post-checks: named rules checked after the gate; any failure stops it;
+#   - confidence is a second axis with bands: auto at or above the threshold,
+#     review at or above the review floor, low below it (Level 4, confidence
+#     gating). Only auto may settle a case;
+#   - a receipt: where the full request and response are kept.
+# With no "adjudication_policy" in handoff.json only the original rule applies:
+# an answer, a confidence and written reasoning.
+
+def adjudication_policy(config: dict) -> dict:
+    policy = config.get("adjudication_policy")
+    return policy if isinstance(policy, dict) else {}
+
+
+def adjudication_band(confidence: float, limit: float, policy: dict) -> str:
+    floor = float(policy.get("review_floor", 0.5))
+    return "auto" if confidence >= limit else "review" if confidence >= floor else "low"
+
+
+def adjudication_problems(adj: dict, config: dict) -> list[str]:
+    """Why an adjudication may not settle a case under the written schema, or []."""
+    policy = adjudication_policy(config)
+    out = []
+    if not str(adj.get("reasoning") or "").strip():
+        out.append("it gives no written reasoning")
+    if not policy:
+        return out
+    schemas = policy.get("schemas") or {}
+    name = adj.get("schema")
+    if not name:
+        out.append("it names no schema; no schema, no adjudication")
+    elif schemas and name not in schemas:
+        out.append("schema '%s' is not one of the written schemas (%s)" % (name, ", ".join(sorted(schemas))))
+    offered = adj.get("offered")
+    if policy.get("require_offered", True):
+        if not isinstance(offered, list) or not offered:
+            out.append("it does not list the options it was offered")
+        elif adj.get("answer") not in offered:
+            out.append("its answer '%s' is not one of the options offered" % adj.get("answer"))
+    exits = set(policy.get("abstain_ids") or [])
+    if adj.get("answer") in exits:
+        out.append("it abstained (%s), which is never applied" % adj.get("answer"))
+    escalate = float(policy.get("escalate_noul", 0.5))
+    quiet = set(policy.get("non_escalating_companions") or [])
+    for comp, value in sorted((adj.get("companions") or {}).items()):
+        if comp in quiet:
+            continue
+        if not isinstance(value, (int, float)) or value >= escalate:
+            out.append("companion '%s' answered %s, at or above %.2f, so the answer goes to review" % (comp, value, escalate))
+    for check, passed in sorted((adj.get("post_checks") or {}).items()):
+        if passed is not True:
+            out.append("post-check '%s' did not pass" % check)
+    required = (schemas.get(name) or {}).get("post_checks") if isinstance(schemas.get(name), dict) else None
+    for check in required or []:
+        if check not in (adj.get("post_checks") or {}):
+            out.append("post-check '%s' of schema '%s' was not run" % (check, name))
+    if policy.get("require_receipt") and not str(adj.get("receipt") or "").strip():
+        out.append("it names no receipt (the stored request and response)")
+    return out
 
 
 # --------------------------------------------------------------------------- evidence and verdicts
@@ -263,12 +351,22 @@ def verdict(case: dict, config: dict, project: Path | None = None) -> dict:
         result = {"verdict": "likely", "answer": cand, "why": "one strong source (%s)%s" % (
             next(iter(srcs)), "; others only support" if any(c != cand for c in by_candidate) else "")}
         adj = case.get("adjudication")
-        if isinstance(adj, dict) and adj.get("answer") == cand and isinstance(adj.get("confidence"), (int, float)):
+        if isinstance(adj, dict) and isinstance(adj.get("confidence"), (int, float)):
             limit, basis = threshold(project or Path("."), config)
             result["threshold"] = {"value": limit, "basis": basis}
-            if adj["confidence"] >= limit and str(adj.get("reasoning") or "").strip():
+            band = adjudication_band(float(adj["confidence"]), limit, adjudication_policy(config))
+            problems = adjudication_problems(adj, config)
+            result["adjudication"] = {"by": adj.get("by"), "answer": adj.get("answer"), "confidence": adj["confidence"],
+                                      "band": band, "schema": adj.get("schema"), "problems": problems}
+            if adj.get("answer") != cand:
+                result["why"] += "; the adjudicator chose %s instead, so it stays likely" % adj.get("answer")
+            elif band == "auto" and not problems:
                 result.update(verdict="settled by adjudication",
                               why=result["why"] + "; adjudicated by %s at %.2f (threshold %.2f, %s)" % (adj.get("by", "?"), adj["confidence"], limit, basis))
+            elif problems:
+                result["why"] += "; adjudication not accepted: " + "; ".join(problems)
+            else:
+                result["why"] += "; adjudication at %.2f is in the %s band, below the threshold %.2f, and is kept as the suggestion" % (adj["confidence"], band, limit)
         return result
     if case.get("nature") in ("policy", "preference"):
         return {"verdict": "open, policy", "answer": None, "why": "no strong evidence, and it is a matter of %s" % case["nature"]}

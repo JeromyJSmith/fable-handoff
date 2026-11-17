@@ -223,8 +223,41 @@ for _rule in OWNER_RULES:
     _rule["compiled"] = [re.compile(pattern, re.IGNORECASE) for pattern in _rule["patterns"]]
 
 
+# A project or preset adds its own owner rules in fable/handoff.json:
+#   owner_rule_headings: regular expressions for headings whose lines are the
+#     owner's rules (MARPA: "Rules for every agent in this repository");
+#   owner_rules: entries shaped like OWNER_RULES ({kind, patterns, effect,
+#     how}); "blocks" makes the readiness check refuse to launch.
+# They are checked before the built-in rules, so a project names its own.
+PROJECT_OWNER_RULES: list = []
+PROJECT_OWNER_HEADINGS: list = []
+
+
+def load_project_owner_rules(project):
+    try:
+        config = json.loads((project / "fable" / "handoff.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not isinstance(config, dict):
+        return
+    PROJECT_OWNER_RULES.clear()
+    PROJECT_OWNER_HEADINGS.clear()
+    for rule in config.get("owner_rules") or []:
+        if isinstance(rule, dict) and rule.get("patterns") and rule.get("effect") in ("honored", "blocks"):
+            PROJECT_OWNER_RULES.append(dict(rule, compiled=[re.compile(p, re.IGNORECASE) for p in rule["patterns"]]))
+    for pattern in config.get("owner_rule_headings") or []:
+        PROJECT_OWNER_HEADINGS.append(re.compile(r"^#{1,6}\s.*(?:%s)" % pattern, re.IGNORECASE))
+
+
+def is_owner_heading(line):
+    return bool(OWNER_HEADING.match(line) or any(h.match(line) for h in PROJECT_OWNER_HEADINGS))
+
+
 def owner_rule(line, under_owner_heading):
     """The owner-rule entry for a line, or None."""
+    for rule in PROJECT_OWNER_RULES:
+        if any(regex.search(line) for regex in rule["compiled"]):
+            return rule
     for rule in OWNER_RULES:
         if any(regex.search(line) for regex in rule["compiled"]):
             return rule
@@ -306,7 +339,7 @@ def scan_file(path, name, accepted, owners=None):
         heading = re.match(r"^(#{1,6})\s", line)
         if heading:
             level = len(heading.group(1))
-            if OWNER_HEADING.match(line):
+            if is_owner_heading(line):
                 owner_level = level
                 continue
             if owner_level is not None and level <= owner_level:
@@ -529,6 +562,7 @@ def main():
             return 2
         return apply_proposal(project, args.approved_by.strip())
 
+    load_project_owner_rules(project)
     accepted = load_accepted(project)
     paths = find_files(project, args.extra)
     names = [display_name(path, project) for path in paths]
