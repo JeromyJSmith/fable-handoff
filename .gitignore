@@ -5,3 +5,5 @@ __pycache__/
 # Run output is never committed: read only to troubleshoot, deleted once its finding is solved (runs/README.md).
 runs/*
 !runs/README.md
+# marimo session caches hold cell outputs (local paths); never committed
+__marimo__/

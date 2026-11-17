@@ -117,7 +117,7 @@ def test_the_validity_check_refuses_each_broken_rule(tmp_path):
     assert "no overwrite or delete" in v(argv=["git", "restore", "data/rows.json"])
     assert "run output is never a source" in v(reads=["runs/2026/report.json"])
     assert "run output is never a source" in v(argv=["cat", "runs/x.json"])
-    assert "held-out project's answer" in v(reads=["answers/held/ulm.json"])
+    assert "held-out project's answer" in v(reads=["answers/held/target.json"])
     assert "no overwrite: data/rows.json already exists" in v(writes=["data/rows.json"])
     assert v(writes=["fable/STATE.md"]) is None
     assert "writer lock" in v(writes=["store.duckdb"])
