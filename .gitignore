@@ -2,3 +2,6 @@ __pycache__/
 .pytest_cache/
 .venv/
 *.skill
+# Run output is never committed: read only to troubleshoot, deleted once its finding is solved (runs/README.md).
+runs/*
+!runs/README.md

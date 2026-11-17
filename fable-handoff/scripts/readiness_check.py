@@ -412,6 +412,103 @@ def check_detective(project, config):
     return rows + [("PASS", "cases", ", ".join("%d %s" % (n, v) for v, n in sorted(counts.items())))]
 
 
+def check_launch_requires(project, config):
+    """What the mission depends on: functions that must be built before launch,
+    functions the run builds as its first tasks, and files that must exist."""
+    req = config.get("launch_requires") or {}
+    if not req:
+        return []
+    funcs = {f.get("name"): f for f in config.get("detective_functions") or [] if isinstance(f, dict)}
+    problems = []
+    for name in req.get("functions_built") or []:
+        f = funcs.get(name)
+        if f is None:
+            problems.append("the mission depends on the function '%s', which is not registered" % name)
+        elif f.get("status") != "built":
+            problems.append("the mission depends on '%s', which is only %s; build it before launch" % (name, f.get("status")))
+    state = (project / "fable" / "STATE.md").read_text(encoding="utf-8", errors="replace").lower() if (project / "fable" / "STATE.md").exists() else ""
+    tasks = [line for line in state.splitlines() if line.strip().startswith("- [")]
+    for name in req.get("functions_first_tasks") or []:
+        if name not in funcs:
+            problems.append("the run must build '%s', which is not registered" % name)
+        elif funcs[name].get("status") != "built" and not any(name.lower() in t for t in tasks):
+            problems.append("'%s' is planned and no task in fable/STATE.md builds it; add it as one of the first tasks" % name)
+    for rel in req.get("files") or []:
+        path = Path(os.path.expanduser(rel))
+        if not (path if path.is_absolute() else project / rel).exists():
+            problems.append("the mission starts from %s, which does not exist yet" % rel)
+    if problems:
+        return [("FAIL", "launch requires", "%d problem(s): %s" % (len(problems), "; ".join(problems)))]
+    return [("PASS", "launch requires", "every function and file the mission depends on is in place or planned as a first task")]
+
+
+def check_model_calls(project, config):
+    """No language model call inside the calculation code (deterministic_code)."""
+    if not (config.get("deterministic_code") or {}).get("paths"):
+        return []
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("fable_stop_gate_scan", SCRIPTS.parent / "assets" / "hooks" / "fable_stop_gate.py")
+    gate = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gate)
+    calls = gate.model_call_findings(str(project), config)
+    if calls:
+        return [("FAIL", "no model calls", "%d model call(s) in calculation code: %s. Calculations are plain, tested code; Jev only in the allowed files." % (
+            len(calls), "; ".join("%s:%d" % (f, n) for f, n, _ in calls[:5])))]
+    return [("PASS", "no model calls", "no language model call in the calculation code")]
+
+
+def check_owner_decisions(project, config):
+    """Decisions the owner must answer before launch (pre_launch_decisions), in plain words."""
+    rel = config.get("pre_launch_decisions")
+    if not rel:
+        return []
+    path = project / rel
+    try:
+        records = json.loads(path.read_text(encoding="utf-8")).get("open_questions", [])
+    except (OSError, ValueError, AttributeError):
+        return [("FAIL", "owner decisions", "%s cannot be read" % rel)]
+    shape = config.get("shape")
+    # A decision may name the shapes that need it ("needed_for"); other shapes launch without it.
+    needed = [q for q in records if not q.get("needed_for") or shape in q["needed_for"]]
+    waiting = [q.get("topic") or q.get("question") for q in needed if q.get("status", "open") == "open"]
+    later = [q.get("topic") for q in records if q not in needed and q.get("status", "open") == "open"]
+    if waiting:
+        return [("FAIL", "owner decisions", "%d decision(s) wait on the owner: %s. Ask them in one sitting: uv run --script <skill>/scripts/decision_interview.py --project . --file %s" % (
+            len(waiting), "; ".join(waiting), rel))]
+    return [("PASS", "owner decisions", "%d answered%s" % (len(needed) - len(waiting) if needed else 0,
+            "; waiting for a later shape: %s" % "; ".join(later) if later else ""))]
+
+
+def check_companions(config):
+    """Each companion repository exists, is on its own run branch (never a release branch) and is clean."""
+    rows = []
+    for c in config.get("companion_repositories") or []:
+        root = Path(os.path.expanduser(str(c.get("path", ""))))
+        label = "companion %s" % root.name
+        if not (root / ".git").exists():
+            rows.append(("FAIL", label, "%s is not a git repository on this machine" % root))
+            continue
+        branch = git(root, "branch", "--show-current").stdout.strip()
+        wanted = str(c.get("branch") or "")
+        if not wanted:
+            rows.append(("FAIL", label, "no branch is named for it in companion_repositories"))
+        elif branch.lower() in RELEASE_BRANCHES or branch != wanted:
+            rows.append(("FAIL", label, "on %s; the run writes it only on its own branch. Switch first: git -C %s switch -c %s" % (branch or "a detached HEAD", root, wanted)))
+        elif dirty_paths(root):
+            rows.append(("FAIL", label, "uncommitted changes: %s. Commit them first, so the run's diff there shows only its work." % short_list(dirty_paths(root))))
+        else:
+            rows.append(("PASS", label, "on %s, clean; tests: %s" % (branch, c.get("test_command") or "none named")))
+        if c.get("map"):
+            # A preparation map that must exist for the very commit the run starts from.
+            commit = git(root, "rev-parse", "--short=9", "HEAD").stdout.strip()
+            pattern = str(c["map"]).replace("{commit}", commit)
+            if not list(root.glob(pattern)):
+                rows.append(("FAIL", label + " map", "no map for commit %s (%s). Map a clean copy at that commit first, for example with the preset's desk_map.py" % (commit, pattern)))
+            else:
+                rows.append(("PASS", label + " map", "mapped at commit %s" % commit))
+    return rows
+
+
 def check_git_branch(project, config):
     if git(project, "rev-parse", "--is-inside-work-tree").returncode != 0:
         return False, [("FAIL", "git branch", "the project is not a git repository. Run git init and commit, so that the run can be reviewed and undone.")]
@@ -732,6 +829,10 @@ def main():
     rows += check_decisions(project)
     rows += check_questions(project, config)
     rows += check_detective(project, config)
+    rows += check_launch_requires(project, config)
+    rows += check_companions(config)
+    rows += check_model_calls(project, config)
+    rows += check_owner_decisions(project, config)
     rows += branch_rows
     if is_repo:
         rows += check_git_clean(dirty_before, dirty_after, args.allow_dirty)

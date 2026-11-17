@@ -1,0 +1,85 @@
+{
+ "open_questions": [
+  {
+   "kind": "judgment",
+   "nature": "policy",
+   "evidence": [
+    {
+     "rung": "the project's files",
+     "searched": "the rung",
+     "found": "nothing that decides it"
+    },
+    {
+     "rung": "decisions",
+     "searched": "the rung",
+     "found": "nothing that decides it"
+    },
+    {
+     "rung": "outside standards",
+     "searched": "the rung",
+     "found": "nothing that decides it"
+    }
+   ],
+   "why_not_decided": "No document decides it; it is the owner's call.",
+   "would_settle": "The owner choosing an option.",
+   "topic": "How the run is split",
+   "question": "Should the work run as one run or as two stages?",
+   "what": "The work can run in one go or in two stages, data first.",
+   "why_it_matters": "Two stages prove the data before anything is computed on it.",
+   "options": [
+    {
+     "choice": "Two stages",
+     "what_happens": "Stage 1 loads the data; stage 2 runs after it."
+    },
+    {
+     "choice": "One run",
+     "what_happens": "Everything runs at once."
+    }
+   ],
+   "recommendation": "Two stages",
+   "recommendation_reason": "The data is checked before any result depends on it."
+  },
+  {
+   "kind": "judgment",
+   "nature": "policy",
+   "evidence": [
+    {
+     "rung": "the project's files",
+     "searched": "the rung",
+     "found": "nothing that decides it"
+    },
+    {
+     "rung": "decisions",
+     "searched": "the rung",
+     "found": "nothing that decides it"
+    },
+    {
+     "rung": "outside standards",
+     "searched": "the rung",
+     "found": "nothing that decides it"
+    }
+   ],
+   "why_not_decided": "No document decides it; it is the owner's call.",
+   "would_settle": "The owner choosing an option.",
+   "topic": "The accuracy target",
+   "question": "How close must a computed total come to the recorded one?",
+   "what": "Stage 2 compares computed totals with recorded totals.",
+   "why_it_matters": "It decides when stage 2 is done.",
+   "options": [
+    {
+     "choice": "Within 10 percent",
+     "what_happens": "Stage 2 is done when every total is within 10 percent."
+    },
+    {
+     "choice": "Within 5 percent",
+     "what_happens": "A stricter target."
+    }
+   ],
+   "recommendation": "Within 10 percent",
+   "recommendation_reason": "It can be reached with the data at hand.",
+   "needed_for": [
+    "stage2"
+   ]
+  }
+ ]
+}

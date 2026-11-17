@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- `init_handoff.py --preset NAME [--shape NAME]`: a firm's preset (assets/presets/NAME/) merges its settings into fable/handoff.json (paths and blocked commands are added to the defaults, never replace them), adds mission and rules sections, installs per-shape mission, ledger and decisions files, and the decisions the owner must answer before launch. `assets/presets/example/` shows the shape.
+- Adjudication under a written schema (the Jev decision framework, disler/ten-levels-of-jev): a named schema, the answer among the options offered, an abstain exit never applied, companion questions, post-checks, a receipt, and confidence bands (auto, review, low).
+- `detective_backtest.py`: `--min-accepted`, a cutoff table, blind adjudications in the verdicts under the threshold the run calibrates.
+- Units for weight, flats, pallets and lump sums; a null tolerance means never compared. Registry sources may be absolute paths.
+- Readiness checks: launch requirements (functions built or planned as first tasks, files), companion repositories (own branch, clean, a map for their commit), no model calls in calculation code, decisions the owner must answer (per shape). The stop gate also refuses model calls in calculation code.
+- The guard: named writable files outside the project, companion repositories, and `unreadable_paths` (run output is never a source; Read, Grep, Glob and shell reads are blocked).
+- Question triage words and owner rules from the project's configuration; `decision_interview.py --file`.
+- `scripts/intent.py`: a condensed INTENT.md from the conversation logs, with a section for data lost or regressed and whether each was resolved.
+- runs/ holds run output and is never committed. The test suite fails if it changes any path outside the repository and the temporary folders that a preset names.
+
 ## 1.3.1 (2026-11-16)
 
 - The detective functions must be the project's own. Init writes the generic registry marked as examples; the preparing agent analyses the project and replaces it (`references/detective-standard.md`, section 7, and the new step in SKILL.md phase 4). Each function names its `project_sources`, and every path must match something in the project. `fable/detective.py functions` and the readiness check refuse generic examples, missing sources and sources that match nothing.

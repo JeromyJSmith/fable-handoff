@@ -42,6 +42,13 @@ WRITE_TOOLS = {
     "NotebookEdit": "notebook_path",
 }
 
+# Tools that read, and the key that holds their path. A path listed in
+# "unreadable_paths" of fable/handoff.json may not be read by them, or named in
+# a shell command (the owner's rule that agents never mine old run output).
+READ_TOOLS = {"Read": "file_path", "Grep": "path", "Glob": "path", "NotebookRead": "notebook_path"}
+FILE_READERS = {"cat", "less", "more", "head", "tail", "grep", "egrep", "rg", "ag", "find", "fd", "ls", "tree", "jq", "sed", "awk",
+                "cp", "rsync", "tar", "zip", "open", "bat", "wc", "diff", "file", "stat", "python", "python3", "uv", "node", "bun", "duckdb", "sqlite3"}
+
 # Shell tools. On Windows without Git Bash, Claude Code runs commands through
 # PowerShell instead of Bash, with the same `command` field.
 SHELL_TOOLS = {"Bash", "PowerShell"}
@@ -202,6 +209,9 @@ class Protected:
         return None
 
 
+COMPANION_ROOTS = []
+
+
 def load_config(project):
     with open(os.path.join(project, "fable", "handoff.json"), encoding="utf-8") as handle:
         config = json.load(handle)
@@ -217,7 +227,21 @@ def load_config(project):
             blocked.append((pattern, re.compile(pattern, re.IGNORECASE)))
         except (re.error, TypeError) as error:
             raise ValueError("invalid regex %r in blocked_bash_patterns: %s" % (pattern, error))
-    return Protected(paths), blocked, bool(config.get("allow_writes_outside_project", False))
+    # Companion repositories: other git repositories one run works in on its
+    # own branch (for example a firm's app beside its data repository). Writes
+    # inside them are allowed; protected_paths apply inside them as well.
+    companions = config.get("companion_repositories") or []
+    if not isinstance(companions, list):
+        raise ValueError("companion_repositories must be a list")
+    COMPANION_ROOTS[:] = [os.path.realpath(os.path.expanduser(str(c.get("path")))) for c in companions if isinstance(c, dict) and c.get("path")]
+    if config.get("allow_writes_outside_project", False) is True:
+        return Protected(paths), blocked, True
+    # Named files outside the project the owner's rules require the run to
+    # write (for example a firm-wide task log). Exact files only, no globs.
+    named = config.get("writable_outside_paths") or []
+    if not isinstance(named, list):
+        raise ValueError("writable_outside_paths must be a list of file paths")
+    return Protected(paths), blocked, [os.path.realpath(os.path.expanduser(str(x))) for x in named if str(x).strip()]
 
 
 # --------------------------------------------------------------- paths
@@ -235,8 +259,17 @@ def relative_to_project(project, path, base):
 def check_file_write(project, protected, allow_outside, path, base):
     rel = relative_to_project(project, os.path.expanduser(path), base)
     if rel is None:
-        if allow_outside:
+        if allow_outside is True:
             return
+        full = os.path.realpath(os.path.join(base, os.path.expanduser(path)))
+        if isinstance(allow_outside, list) and full in allow_outside:
+            return
+        for root in COMPANION_ROOTS:
+            if full.startswith(root + os.sep):
+                reason = protected.match(os.path.relpath(full, root).replace(os.sep, "/"))
+                if reason:
+                    block("%s is protected in the companion repository %s: %s of fable/handoff.json." % (path, root, reason))
+                return
         block(
             "%s is outside the project, and this run may only write inside it." % path,
             "Keep new files, including scratch files, inside the project directory.",
@@ -586,6 +619,11 @@ def check_bash(project, protected, blocked, command, cwd):
                     block("the command would delete or move %s, which contains this project." % path)
                 rel = relative_to_project(project, expanded, base)
                 if rel is None:
+                    for root in COMPANION_ROOTS:
+                        crel = relative_to_project(root, expanded, base)
+                        if crel is not None and protected.match(crel, removes):
+                            block("the command would write to, move or delete %s, which is protected in the companion repository %s." % (path, root),
+                                  "Reading a protected file or copying it elsewhere is allowed. Changing it is not.")
                     continue
                 reason = protected.match(rel, removes)
                 if reason:
@@ -607,13 +645,69 @@ def check_bash(project, protected, blocked, command, cwd):
                     seen.append(base)
 
 
+def load_unreadable(project):
+    try:
+        with open(os.path.join(project, "fable", "handoff.json"), encoding="utf-8") as handle:
+            paths = json.load(handle).get("unreadable_paths") or []
+    except (OSError, ValueError, AttributeError):
+        return None
+    return Protected([str(x) for x in paths]) if isinstance(paths, list) and paths else None
+
+
+def unreadable_reason(project, unreadable, path, base):
+    rel = relative_to_project(project, expand(path, project, base), base)
+    if rel is None:
+        return None
+    return unreadable.match(rel)
+
+
+def check_reads(project, unreadable, tool, tool_input, cwd):
+    paths = []
+    if tool in READ_TOOLS:
+        paths += [tool_input.get(READ_TOOLS[tool]), tool_input.get("file_path")]
+        if tool == "Glob":
+            base = tool_input.get("path") or "."
+            paths.append(os.path.join(base, str(tool_input.get("pattern") or "")).split("*")[0] or None)
+    bases = [cwd]
+    if tool not in READ_TOOLS:
+        command = tool_input.get("command")
+        if isinstance(command, str):
+            for tokens in split_commands(strip_heredocs(command)):
+                words = plain_words(tokens)
+                if words and words[0] in ("cd", "pushd") and len(words) > 1:
+                    bases.append(os.path.normpath(os.path.join(cwd, expand(words[1], project, cwd))))
+                # A word with a slash is a path; a bare word counts only after a command that reads files.
+                reader = bool(words) and os.path.basename(words[0]) in FILE_READERS
+                paths += [w for w in words[1:] if not w.startswith("-") and ("/" in w or reader)]
+                paths += [text for kind, text in tokens if kind != "word"]
+    for path in paths:
+        if not (isinstance(path, str) and path.strip()):
+            continue
+        for base in bases:
+            reason = unreadable_reason(project, unreadable, path.strip(), base)
+            if reason:
+                break
+        if reason:
+            block(
+                "%s is run output that this run may not read: %s (unreadable_paths of fable/handoff.json)." % (path, reason.replace("protected_paths", "unreadable_paths")),
+                "Old run output is never a source of information. Work from the project's data, its documents and the "
+                "troubleshooting document, which holds every finding taken from runs.",
+            )
+
+
 def main():
     payload = read_payload()
     project = find_project(payload)
     if project is None:
         return 0
     tool = payload.get("tool_name")
-    if tool not in SHELL_TOOLS and tool not in WRITE_TOOLS:
+    if tool not in SHELL_TOOLS and tool not in WRITE_TOOLS and tool not in READ_TOOLS:
+        return 0
+    unreadable = load_unreadable(project)
+    if tool in READ_TOOLS:
+        if unreadable is not None:
+            tool_input = payload.get("tool_input") if isinstance(payload.get("tool_input"), dict) else {}
+            check_reads(project, unreadable, tool, tool_input, payload.get("cwd") or project)
         return 0
     try:
         protected, blocked, allow_outside = load_config(project)
@@ -627,6 +721,8 @@ def main():
     if tool in SHELL_TOOLS:
         command = tool_input.get("command")
         if isinstance(command, str) and command.strip():
+            if unreadable is not None:
+                check_reads(project, unreadable, tool, tool_input, cwd)
             check_bash(project, protected, blocked, command, cwd)
     else:
         # NotebookEdit's field is not in the hooks reference, so accept either name.

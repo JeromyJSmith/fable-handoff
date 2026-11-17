@@ -493,7 +493,52 @@ JUDGMENT_CUES = re.compile(
 )
 
 
+# A project or preset may add its own cue words in "question_triage" of
+# fable/handoff.json or of assets/presets/<name>/preset.json:
+#   judgment_cues: words that mean the firm's own choice (for example: design
+#     intent, client preference, allowance, fee policy). These win.
+#   fact_cues: words that mean a fact the drawings, budget or standard can
+#     answer (for example: dimensions, labels, quantities, species). A fact cue
+#     overrides a generic judgment cue, so "what tolerance does the budget
+#     use" is searched, not asked.
+PROJECT_CUES: dict[str, re.Pattern | None] = {"judgment": None, "fact": None}
+
+
+def _cue_regex(words) -> re.Pattern | None:
+    words = [str(w).strip() for w in words or [] if str(w).strip()]
+    return re.compile(r"\b(?:%s)\b" % "|".join(words), re.IGNORECASE) if words else None
+
+
+def load_triage_cues(project: Path, preset: str | None = None) -> dict:
+    """Read the project's or preset's cue words into PROJECT_CUES. Returns the raw lists."""
+    found: dict = {}
+    sources = []
+    if preset:
+        sources.append(Path(__file__).resolve().parent.parent / "assets" / "presets" / preset / "preset.json")
+    sources.append(project / "fable" / "handoff.json")
+    for path in sources:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            block = data.get("question_triage") or (data.get("config") or {}).get("question_triage") or {}
+        except (OSError, ValueError, AttributeError):
+            continue
+        for key in ("judgment_cues", "fact_cues"):
+            for word in block.get(key) or []:
+                found.setdefault(key, [])
+                if word not in found[key]:
+                    found[key].append(word)
+    PROJECT_CUES["judgment"] = _cue_regex(found.get("judgment_cues"))
+    PROJECT_CUES["fact"] = _cue_regex(found.get("fact_cues"))
+    return found
+
+
 def triage_question(text: str) -> dict:
+    own = PROJECT_CUES["judgment"].search(text) if PROJECT_CUES["judgment"] else None
+    if own:
+        return {"question": text, "kind": "judgment", "why": "asks for the firm's own choice (\"%s\")" % own.group(0)}
+    fact = PROJECT_CUES["fact"].search(text) if PROJECT_CUES["fact"] else None
+    if fact:
+        return {"question": text, "kind": "evidence", "why": "asks for a fact the project holds (\"%s\"); search the evidence ladder first" % fact.group(0)}
     cue = JUDGMENT_CUES.search(text)
     if cue:
         return {"question": text, "kind": "judgment", "why": "asks for a policy or preference (\"%s\")" % cue.group(0)}
@@ -706,6 +751,7 @@ def main() -> int:
                     help="also read the conversation logs Claude Code keeps for this project (~/.claude/projects/...); needs jq")
     ap.add_argument("--no-previous-run", action="store_true",
                     help="ignore what an earlier handoff run left in fable/ (lessons, decisions, report, transcripts)")
+    ap.add_argument("--preset", help="a preset in assets/presets/ (for example example) whose question triage words to use")
     ap.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
     ap.add_argument("--no-write", action="store_true", help="do not write fable/PREFLIGHT.md and fable/preflight.json")
     args = ap.parse_args()
@@ -720,6 +766,7 @@ def main() -> int:
         print("These --source paths do not exist: " + ", ".join(missing), file=sys.stderr)
         return 2
 
+    load_triage_cues(project, args.preset)
     git = git_state(project)  # before any test run creates cache files
     docs, evals, instructions, goal_doc = discover(project, sources, args.goal)
     previous = {} if args.no_previous_run else previous_run(project)

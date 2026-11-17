@@ -1,0 +1,202 @@
+{
+ "name": "example",
+ "about": "A small example preset that shows every key a firm's preset can set. It is used by the test suite.",
+ "mission_section": "MISSION_EXAMPLE.md",
+ "operating_rules_section": "OPERATING_RULES_EXAMPLE.md",
+ "owner_decisions": "owner_decisions.json",
+ "default_shape": "stage1",
+ "config": {
+  "preset": "example",
+  "verify_command": "uv run pytest -q",
+  "decisions_log": "DECISIONS.md",
+  "evidence_ladder": [
+   {
+    "rung": "the project's files",
+    "look_in": "the data, the documents and the code"
+   },
+   {
+    "rung": "decisions",
+    "look_in": "DECISIONS.md and earlier answers"
+   },
+   {
+    "rung": "outside standards",
+    "look_in": "published references"
+   }
+  ],
+  "detective_functions": [
+   {
+    "name": "name match",
+    "looks_at": "names against the project's vocabulary",
+    "returns": "the entry a name matches",
+    "strength": "strong",
+    "status": "built",
+    "test": "see the project's tests",
+    "project_sources": [
+     "docs/**"
+    ]
+   },
+   {
+    "name": "rules and precedent",
+    "looks_at": "the recorded decisions",
+    "returns": "the answer a decision gives",
+    "strength": "decisive",
+    "status": "built",
+    "test": "see the project's tests",
+    "project_sources": [
+     "DECISIONS.md"
+    ]
+   },
+   {
+    "name": "quantity match",
+    "looks_at": "measured quantities against the stated ones, within tolerance",
+    "returns": "the entry whose quantity agrees",
+    "strength": "strong",
+    "status": "planned",
+    "test": "see the project's tests",
+    "project_sources": [
+     "data/**"
+    ]
+   },
+   {
+    "name": "adjudication",
+    "looks_at": "a model answer under a written schema",
+    "returns": "one listed option with its confidence",
+    "strength": "lead",
+    "status": "built",
+    "test": "see the project's tests",
+    "project_sources": [
+     "schemas.yaml"
+    ]
+   }
+  ],
+  "quantity_tolerance": {
+   "area": 5.0,
+   "length": 5.0,
+   "count": 0.0,
+   "volume": 10.0,
+   "weight": null,
+   "default_pct": 2.0
+  },
+  "adjudication_threshold": 0.9,
+  "adjudication_policy": {
+   "by": "adjudicator",
+   "review_floor": 0.5,
+   "escalate_noul": 0.5,
+   "abstain_ids": [
+    "OTHER"
+   ],
+   "non_escalating_companions": [
+    "same_concept"
+   ],
+   "require_offered": true,
+   "require_receipt": true,
+   "schemas": {
+    "category": {
+     "what": "the category an entry belongs to",
+     "post_checks": [
+      "answer_is_listed"
+     ],
+     "companions": [
+      "evidence_insufficient"
+     ],
+     "abstain": true
+    }
+   }
+  },
+  "question_triage": {
+   "judgment_cues": [
+    "design intent",
+    "client preference",
+    "fee policy"
+   ],
+   "fact_cues": [
+    "dimension\\w*",
+    "quantit\\w+",
+    "tolerance",
+    "label\\w*"
+   ]
+  },
+  "owner_rule_headings": [
+   "team rules"
+  ],
+  "owner_rules": [
+   {
+    "kind": "example-one-writer",
+    "patterns": [
+     "\\bone writer at a time\\b"
+    ],
+    "effect": "honored",
+    "how": "Writes go through the project's lock, one writer at a time."
+   }
+  ],
+  "protected_paths": [
+   "DECISIONS.md.lock",
+   "data/originals/**"
+  ],
+  "blocked_bash_patterns": [
+   "\\bsendmail\\b"
+  ],
+  "unreadable_paths": [
+   "runs",
+   "runs/**"
+  ],
+  "deterministic_code": {
+   "paths": [
+    "calc/**/*.py"
+   ],
+   "allowed": [
+    "**/*_adjudicator.py"
+   ],
+   "why": "calculations are plain, tested code"
+  },
+  "pre_launch_decisions": "fable/owner_decisions.json",
+  "definition_of_done": {
+   "rows": [
+    "every entry loaded",
+    "every total reconciles"
+   ]
+  }
+ },
+ "shapes": {
+  "stage1": {
+   "about": "Stage 1: load the data.",
+   "config": {
+    "branch": "fable/example-stage1",
+    "verify_command": "uv run pytest -q && test -f done_check.py && uv run done_check.py --stage 1",
+    "launch_requires": {
+     "functions_built": [
+      "name match",
+      "rules and precedent"
+     ],
+     "functions_first_tasks": [
+      "quantity match"
+     ],
+     "files": [
+      "docs/GOALS.md"
+     ]
+    }
+   },
+   "mission_note": "MISSION_STAGE1.md"
+  },
+  "stage2": {
+   "about": "Stage 2: compute on the loaded data.",
+   "config": {
+    "branch": "fable/example-stage2",
+    "verify_command": "uv run pytest -q && test -f done_check.py && uv run done_check.py --stage 2",
+    "launch_requires": {
+     "functions_built": [
+      "name match",
+      "rules and precedent",
+      "quantity match"
+     ],
+     "functions_first_tasks": [],
+     "files": [
+      "docs/GOALS.md",
+      "fable/done/stage1.json"
+     ]
+    }
+   },
+   "mission_note": "MISSION_STAGE2.md"
+  }
+ }
+}
