@@ -42,6 +42,10 @@ Every budget line has one code: slot, item, component and role. The run keeps si
 
 The .vwx format is undocumented and compressed. `bash vwx/run_vwx.sh <project_id> <file.vwx>` decodes it: `s01_decode` (header and Snappy block stream) → `s02_records` (records, classes, layers, symbols, texts, geometry as NDJSON) → `s03_filter.jq` (only what the budget reads) → `s04_transform` (Polars, geometry as GeoParquet) → `s05_load` (DuckDB staging and the geometry store), then the class mapping and text stages.
 
+### Starting from a worktree
+
+A run works on its own branch, often in a fresh worktree. A worktree has only what git tracks, so the git-ignored data stage 1 reads (the loaded NDJSON, the working database, the owner's import, the budget workbooks, the decoded drawings, the archives and the Jev receipts) is linked from the main checkout before launch: `uv run --script <skill>/scripts/link_shared_data.py --project .`. It only adds links and never overwrites. The readiness check refuses a launch while any of it is missing. Database writes still go through the writer lock, so the one working database stays the only one.
+
 ### Run output
 
 Output of test and pipeline runs goes to a git-ignored runs/ folder and is never committed. It is read only to find what went wrong; each finding goes into one troubleshooting document and is worked with the detective method; once solved, its run output is deleted. Earlier runs are never mined as a source of information.

@@ -92,6 +92,12 @@ Calibrated threshold: **0.88**, the lowest confidence at which at least 10 answe
 
 Verdicts: 29 right (all settled by adjudication), 1 wrong, 7 open. The wrong one is the class whose name and project document both say groundcovers, which the owner ruled flatwork; MARPA's own blind test gets it wrong the same way. MARPA's test reports 28 of 29; the one extra right answer here is a case Jev answered between 0.88 and 0.90.
 
+### Re-run on 2026-11-17
+
+After the standard's class ladder became rule evidence (standard repository decisions D170 and D171), the export took the rule evidence with the rulings visible. That brought each case's own ruling back as a decisive "ladder" source, which scored 37 right, 0 wrong and 0 open. That was a leak, not a result. The exporter now reads MARPA's held-out ladder and adds the ruling under its own source.
+
+The real result is 30 right, 1 wrong and 6 open. 24 cases are settled by the held-out ladder's name rungs and 6 by adjudication. The wrong case is still the beach cobble. The cutoff table and the 0.88 threshold are unchanged. The test now fails if any case carries its own answer outside its ruling.
+
 ## Rebuilding the decided cases
 
 `decided_cases.json` names client projects, so it is not in this public repository. Rebuild it on the owner's machine, read only:

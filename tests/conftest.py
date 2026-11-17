@@ -286,16 +286,24 @@ def _absolute_strings(value, out):
 def watched_paths() -> list[Path]:
     found: set[str] = set()
     shared_logs: set[str] = set()
+    live_checkouts: set[str] = set()
     for preset in sorted((SKILL / "assets" / "presets").glob("*/preset.json")):
         data = json.loads(preset.read_text())
         _absolute_strings(data, found)
         # a firm-wide log other agents append to while the suite runs is not watched
-        shared_logs |= {str(Path(x).expanduser()) for x in (data.get("config") or {}).get("writable_outside_paths") or []}
+        cfg = data.get("config") or {}
+        shared_logs |= {str(Path(x).expanduser()) for x in cfg.get("writable_outside_paths") or []}
+        # live working checkouts other sessions edit while the suite runs: their own files are
+        # not watched as a folder (explicitly named files in them still are)
+        live = [cfg.get("shared_data", {}).get("from")] + [c.get("path") for c in cfg.get("companion_repositories") or []]
+        live_checkouts.update(str(Path(x).expanduser()) for x in live if x)
     found |= {p for p in os.environ.get("FABLE_WATCH_PATHS", "").split(os.pathsep) if p}
     paths = []
     for raw in sorted(found):
         p = Path(raw.replace("*", "")).expanduser()
         if not p.exists() or str(p).startswith(str(REPO)):
+            continue
+        if p.is_dir() and str(p) in live_checkouts:
             continue
         if p.is_dir():
             # a directory: its own entries one level down (a whole checkout is too large to hash)
