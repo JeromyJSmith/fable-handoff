@@ -14,7 +14,7 @@
 - install.sh `--ref` takes a branch, a tag or a commit (full or short hash).
 - A standards check that names a missing file fails the readiness check.
 - `init_handoff.py --create-branch` switches to the run's branch, creating it when needed.
-- `shared_data` and `scripts/link_shared_data.py`: a fresh worktree links the git-ignored data it reads from the main checkout; readiness checks it is there. Nothing is overwritten.
+- `shared_data` (a list of paths, or `all_ignored` for every git-ignored entry of the main checkout) and `scripts/link_shared_data.py`: a fresh worktree links the git-ignored data it reads from the main checkout; readiness checks it is there. Nothing is overwritten.
 - runs/ holds run output and is never committed. The test suite fails if it changes any path outside the repository and the temporary folders that a preset names.
 
 ## 1.3.1 (2026-11-16)

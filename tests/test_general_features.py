@@ -474,3 +474,27 @@ def test_a_worktree_links_the_shared_data_from_the_main_checkout_without_overwri
     commit_all(project, "fewer")
     _, data = readiness(project)
     assert statuses(data)["shared data"] == "PASS" and "2 linked" in next(r for r in data["rows"] if r["check"] == "shared data")["detail"]
+
+
+def test_shared_data_can_take_every_ignored_path_of_the_main_checkout(tmp_path):
+    main = bare_project(tmp_path, "main")
+    (main / ".gitignore").write_text((main / ".gitignore").read_text() + "data/\nstore.duckdb\n.venv/\nscratch/\n")
+    commit_all(main, "ignore data")
+    (main / "data").mkdir()
+    (main / "data/rows.ndjson").write_text("{}\n")
+    (main / "store.duckdb").write_text("db")
+    (main / ".venv").mkdir()
+    (main / "scratch").mkdir()
+    (main / "scratch/tmp.txt").write_text("x")
+    project = bare_project(tmp_path, "worktree")
+    assert init(project).returncode == 0
+    write_cfg(project, shared_data={"from": str(main), "all_ignored": True, "exclude": ["scratch"]})
+    commit_all(project, "shared")
+    _, data = readiness(project)
+    row = next(r for r in data["rows"] if r["check"] == "shared data")
+    assert row["status"] == "FAIL" and "data" in row["detail"] and ".venv" not in row["detail"] and "scratch" not in row["detail"]
+    proc = run([*script("link_shared_data.py"), "--project", str(project)])
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert sorted(p["path"] for p in json.loads(proc.stdout)["paths"]) == ["data", "store.duckdb"]
+    _, data = readiness(project)
+    assert statuses(data)["shared data"] == "PASS"

@@ -506,7 +506,13 @@ def check_standards(project, config):
 def check_shared_data(project, config):
     """Data a fresh checkout lacks (git-ignored), taken from the main checkout through links (shared_data)."""
     spec = config.get("shared_data") or {}
-    paths = spec.get("paths") or []
+    if not spec:
+        return []
+    import importlib.util
+    module_spec = importlib.util.spec_from_file_location("fable_link_shared_data", SCRIPTS / "link_shared_data.py")
+    linker = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(linker)
+    paths = linker.shared_paths(spec)
     if not paths:
         return []
     missing = [p for p in paths if not (project / p).exists()]
