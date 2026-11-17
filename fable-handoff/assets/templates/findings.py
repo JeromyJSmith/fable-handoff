@@ -60,6 +60,9 @@ def collect(project: Path) -> list[dict]:
             out.append({"kind": "detective case", "key": "case:%s" % (c.get("id") or c.get("subject")),
                         "text": "Detective case %s: %s (%s)" % (c.get("id") or "", c.get("question") or c.get("subject") or "", verdict),
                         "status": "open", "evidence": None})
+    for q in read_json(fable / "questions_to_settle.json", []):
+        out.append({"kind": "question to settle from evidence", "key": "question:%s" % (q.get("id") or q.get("question", "")[:120]),
+                    "text": "Settle from evidence: %s" % (q.get("question") or q.get("topic") or "")[:300], "status": "open", "evidence": None})
     for g in (read_json(fable / "gaps.json", {}) or {}).get("gaps", []):
         if g.get("status", "open") == "open":
             out.append({"kind": "gap", "key": "gap:%s" % g.get("id"), "text": "Gap %s (%s): %s" % (g.get("id"), g.get("kind", ""), " | ".join(x for x in g.get("between") or [] if x)),

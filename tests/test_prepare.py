@@ -59,6 +59,7 @@ def test_prepare_runs_every_phase_and_stops_at_the_owners_sign_off(tmp_path):
     state = (project / "fable/STATE.md").read_text()
     assert "<!-- draft" not in state and all("(check: `" in l for l in state.splitlines() if l.startswith("- [ ]"))
     assert (project / "fable/findings.json").exists() and (project / "fable/handoff_spec.json").exists()
+    assert (project / "fable/questions_to_settle.json").exists() and json.loads((project / "fable/handoff_spec.json").read_text())["open_questions"] == []
     assert "Launching (phase 8) is the owner's" in proc.stdout
     # the owner answers, signs and commits: readiness then passes the prepared package
     packet = json.loads((project / "fable/owner_decisions.json").read_text())["open_questions"]

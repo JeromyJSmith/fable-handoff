@@ -290,7 +290,22 @@ def phase_1(ctx: Ctx, outputs: dict) -> dict:
 def phase_2(ctx: Ctx, outputs: dict) -> dict:
     checks, commands = [], []
     need(2, ctx, checks)
-    commands.append(run(ctx, 2, [*script("decision_interview.py"), "--project", ".", "--check"]))
+    # The project's real question system (from the config, or the preset's), never preflight's drafted spec:
+    # judgment questions must be written up to ask; evidence questions are detective work for the run.
+    import importlib.util
+    _spec = importlib.util.spec_from_file_location("fable_decision_interview", SCRIPTS / "decision_interview.py")
+    di = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(di)
+    qm = di.questions_module(ctx.project)
+    config = load_config(ctx.project) or preset_config(ctx.preset, ctx.shape)
+    system_records = [q for q in qm.system(ctx.project, config).load() if q.get("status", "open") == "open"]
+    judgment = [q for q in system_records if q.get("kind") != "evidence"]
+    evidence = [q for q in system_records if q.get("kind") == "evidence"]
+    bad_system = [(q.get("topic") or q.get("question", "")[:60], di.problems(q, qm, qm.rung_names(config))) for q in judgment if di.problems(q, qm, qm.rung_names(config))]
+    check(checks, "every open judgment question in the question system is written up well enough to ask (%d)" % len(judgment), not bad_system,
+          "; ".join("%s: %s" % (t, ", ".join(p)) for t, p in bad_system[:3]))
+    (ctx.project / "fable" / "questions_to_settle.json").write_text(json.dumps(evidence, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    commands.append({"command": "the question system's open questions: %d judgment, %d evidence (to settle from evidence, fable/questions_to_settle.json)" % (len(judgment), len(evidence)), "exit": 0})
     packet = None
     if ctx.preset:
         preset = json.loads((SKILL / "assets/presets" / ctx.preset / "preset.json").read_text(encoding="utf-8"))
@@ -315,7 +330,7 @@ def phase_2(ctx: Ctx, outputs: dict) -> dict:
               "; ".join("%s: %s" % (t, ", ".join(p)) for t, p in bad[:3]))
         commands.append({"command": "decision_interview.problems on fable/owner_decisions.json with the preset's ladder", "exit": 0 if not bad else 1})
         # not an input: the owner's answers are expected to change this file; readiness checks them directly
-    return {"checks": checks, "commands": commands, "inputs": inputs, "leaves": [], "data": {}}
+    return {"checks": checks, "commands": commands, "inputs": inputs, "leaves": ["fable/questions_to_settle.json"], "data": {"judgment": len(judgment), "evidence": len(evidence)}}
 
 
 def phase_3(ctx: Ctx, outputs: dict) -> dict:
@@ -436,6 +451,12 @@ def phase_6(ctx: Ctx, outputs: dict) -> dict:
         elif head.startswith("out of scope"):
             scope = [{"text": i, "reason": "the owner left it out of this run"} for i in items]
     decisions_text = sections((fable / "DECISIONS.md").read_text(encoding="utf-8")).get("Made before the run", "")
+    drafted = spec.get("open_questions") or []
+    if drafted:
+        # preflight drafts every question it finds in documents and logs; most are not open decisions.
+        # They are kept for review, never asked as they are; the owner's questions live in the question system.
+        (fable / "drafted_questions.json").write_text(json.dumps(drafted, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    spec["open_questions"] = []
     spec.update({
         "goal": dict(spec.get("goal") or {}, job=sec.get("Job", ""), why=sec.get("Why", "")),
         "commands": dict(spec.get("commands") or {}, verify=cfg.get("verify_command") or ""),
@@ -453,7 +474,7 @@ def phase_6(ctx: Ctx, outputs: dict) -> dict:
     return {"checks": checks, "commands": commands,
             "inputs": [p for p in ("fable/INTENT.json", "fable/cases.json", "fable/gaps.json") if (ctx.project / p).exists()],
             "leaves": ["fable/findings.json", "fable/STATE.md", "fable/MISSION.md", "fable/handoff_spec.json"],
-            "data": {"findings": len(findings), "open_findings": len(open_findings), "tasks": len(tasks), "tasks_added": len(added)}}
+            "data": {"findings": len(findings), "open_findings": len(open_findings), "tasks": len(tasks), "tasks_added": len(added), "drafted_questions_kept_for_review": len(drafted)}}
 
 
 def phase_7(ctx: Ctx, outputs: dict) -> dict:
