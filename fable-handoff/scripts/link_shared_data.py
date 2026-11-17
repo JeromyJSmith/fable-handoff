@@ -10,6 +10,11 @@ tables, databases, imported files) is missing there, so the readiness check
 fails and the run cannot start. "shared_data" in fable/handoff.json names it:
 
     "shared_data": {"from": "/path/to/the/main/checkout", "paths": ["data/", "store.duckdb"]}
+    "shared_data": {"from": "/path/to/the/main/checkout", "all_ignored": true, "exclude": ["scratch/"]}
+
+With "all_ignored", the paths are every entry git ignores in the main checkout
+(`git status --ignored`), except environments, caches and locks (DEFAULT_EXCLUDE)
+and anything in "exclude".
 
 This script makes each missing path a symbolic link to the same path in the
 main checkout. It never overwrites or removes anything: a path that already
@@ -33,6 +38,28 @@ import sys
 from pathlib import Path
 
 
+DEFAULT_EXCLUDE = (".venv", ".pixi", "node_modules", "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache", ".DS_Store",
+                   ".writer.lock", ".claude/", ".git/", ".locks", "__marimo__", ".orig")
+
+
+def shared_paths(spec: dict, project: Path | None = None) -> list[str]:
+    """The paths shared_data names: its list, or every git-ignored entry of the main checkout."""
+    paths = [str(p).rstrip("/") for p in spec.get("paths") or []]
+    if spec.get("all_ignored") and spec.get("from"):
+        import subprocess
+        source = Path(os.path.expanduser(str(spec["from"])))
+        out = subprocess.run(["git", "-C", str(source), "status", "--ignored", "--porcelain"], capture_output=True, text=True).stdout
+        exclude = list(DEFAULT_EXCLUDE) + [str(x) for x in spec.get("exclude") or []]
+        for line in out.splitlines():
+            if not line.startswith("!! "):
+                continue
+            rel = line[3:].strip().strip('"').rstrip("/")
+            if rel and not any(x.rstrip("/") in rel.split("/") or rel.startswith(x) or rel.endswith(x) for x in exclude):
+                if rel not in paths:
+                    paths.append(rel)
+    return paths
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--project", required=True)
@@ -45,7 +72,7 @@ def main() -> int:
         print("cannot read fable/handoff.json: %s" % error, file=sys.stderr)
         return 1
     source = Path(os.path.expanduser(str(spec.get("from") or ""))).resolve() if spec.get("from") else None
-    paths = [str(p).rstrip("/") for p in spec.get("paths") or []]
+    paths = shared_paths(spec)
     if not paths:
         print("shared_data names no paths; nothing to do")
         return 0
