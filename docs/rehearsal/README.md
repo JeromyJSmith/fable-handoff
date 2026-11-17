@@ -89,3 +89,7 @@ It keeps four things in the people's own words: the owner's goals and rules, the
 On the real logs, it finds both known losses: the Ulm slope setting (10.7%) and the "2 WEEKS" sod-timing note. Both are still open: the latest messages ask where they now sit in the working database. An integrated test fails unless both are found.
 
 This INTENT.md names client projects, so it is kept on this machine in `runs/<date>_intent-marpa-standard-private/` and not committed, until the owner decides how client data in run output should be kept.
+
+## Re-check on 2026-11-16 at standard commit ae13485 (accessibility fix 38af501)
+
+The accessibility test now writes its screenshots to a new dated folder under `runs/` and leaves the repository clean. With the stand-in owner answers, readiness on fresh copies gives no failure for the single run or stage 1. The only warning left is the ten AGENTS.md lines that name absolute paths. The reports are kept in `runs/2026-11-16_193653_readiness-38af501-private/` on this machine (they name the first new project).
