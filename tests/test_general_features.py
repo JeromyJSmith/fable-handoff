@@ -470,6 +470,7 @@ def test_a_worktree_links_the_shared_data_from_the_main_checkout_without_overwri
     assert report == {"data/loaded": "linked now", "store.duckdb": "linked now", "kept.txt": "present", "absent.json": "missing in the main checkout too"}
     assert proc.returncode == 1 and (project / "kept.txt").read_text() == "mine\n"
     assert (project / "data/loaded/rows.ndjson").read_text() == "{}\n" and (project / "store.duckdb").is_symlink()
+    assert "/data/loaded" in (project / ".git/info/exclude").read_text() and "data/loaded" not in git(project, "status", "--porcelain").stdout
     write_cfg(project, shared_data={"from": str(main), "paths": ["data/loaded", "store.duckdb", "kept.txt"]})
     commit_all(project, "fewer")
     _, data = readiness(project)
