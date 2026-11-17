@@ -323,10 +323,21 @@ def test_backtest_needs_enough_accepted_answers_and_uses_blind_adjudications(tmp
 def test_marpas_decided_cases_reproduce_the_blind_test(tmp_path):
     project = bare_project(tmp_path)
     assert init(project, "--preset", "marpa").returncode == 0
+    # No case may carry its own answer under any source but its ruling: the rule evidence must come
+    # from MARPA's held-out class ladder, never the ladder run that applies the owner's rulings.
+    decided = json.loads(DECIDED.read_text())
+    for case in decided:
+        rulings = [e for e in case["evidence"] if e["source"].startswith("ruling:")]
+        assert len(rulings) == 1 and case["ruling_sources"] == [rulings[0]["source"]], case["id"]
+        assert not any("owner" in e["source"].split(":")[1] for e in case["evidence"] if e["source"].startswith("ladder:")), case["id"]
     report = json.loads(backtest(project, DECIDED, "--min-accepted", "10", "--target", "0.9").stdout)
     assert report["cases"] == 37 and report["evidence_removed_as_the_cases_own_ruling"] == 37
-    assert report["outcome"] == {"right": 29, "wrong": 1, "open": 7, "invalid": 0}
-    assert report["settled_by_adjudication"] == {"right": 29, "wrong": 0}
+    # 2026-11-17: 30 right, 1 wrong, 6 open. Before the standard's class ladder became rule evidence
+    # (standard repository decisions D170 and D171) it was 29, 1 and 7, all 29 settled by adjudication.
+    # Now 24 settle by the held-out ladder's name rungs and 6 by adjudication. An export that read the
+    # ladder with the rulings applied gave 37, 0 and 0: that was a leak, fixed in export_decided_cases.py.
+    assert report["outcome"] == {"right": 30, "wrong": 1, "open": 6, "invalid": 0}
+    assert report["settled_by_adjudication"] == {"right": 6, "wrong": 0}
     # the one wrong verdict is the class the name and the project's own document both place under groundcovers,
     # which the owner ruled flatwork (the same case MARPA's own blind test gets wrong)
     assert len(report["wrong"]) == 1 and report["wrong"][0]["answer"] == "5.0 GROUNDCOVERS"

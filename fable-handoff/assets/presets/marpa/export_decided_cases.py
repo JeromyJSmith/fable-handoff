@@ -66,7 +66,12 @@ def main() -> int:
         cls = next((c for (pp, c) in ctx.classes if pp == project and name_key(c) == key), ruling["class"])
         truth = ctx.canon(ruling["slot"]) or md.NO_SLOT
         case = md.Case("decided:%s|%s" % (project, key), "class", project, cls, "Which slot pays for what this class draws?", truth=truth)
-        evidence = md.rules_precedent(ctx, case, hide_own=False)
+        # Rule evidence in blind mode: the class ladder run without the owner's rulings
+        # (hide_own=True reads MARPA's held-out ladder). Read with hide_own=False it would
+        # carry the case's own ruling under another source ("ladder:..."), which the
+        # back-test could not remove: the answer would leak into its own test.
+        evidence = md.rules_precedent(ctx, case, hide_own=True)
+        evidence.append(md.Evidence("rules_precedent", truth, "decisive", "ruling:%s|%s" % (project, key), "the owner's ruling (%s)" % ruling.get("ruling")))
         for function in md.FUNCTIONS:
             evidence += function(ctx, case)
         items, ruling_sources = [], []
