@@ -495,10 +495,10 @@ JUDGMENT_CUES = re.compile(
 
 # A project or preset may add its own cue words in "question_triage" of
 # fable/handoff.json or of assets/presets/<name>/preset.json:
-#   judgment_cues: words that mean the firm's own choice (for MARPA: design
+#   judgment_cues: words that mean the firm's own choice (for example: design
 #     intent, client preference, allowance, fee policy). These win.
 #   fact_cues: words that mean a fact the drawings, budget or standard can
-#     answer (for MARPA: dimensions, labels, quantities, species). A fact cue
+#     answer (for example: dimensions, labels, quantities, species). A fact cue
 #     overrides a generic judgment cue, so "what tolerance does the budget
 #     use" is searched, not asked.
 PROJECT_CUES: dict[str, re.Pattern | None] = {"judgment": None, "fact": None}
@@ -751,7 +751,7 @@ def main() -> int:
                     help="also read the conversation logs Claude Code keeps for this project (~/.claude/projects/...); needs jq")
     ap.add_argument("--no-previous-run", action="store_true",
                     help="ignore what an earlier handoff run left in fable/ (lessons, decisions, report, transcripts)")
-    ap.add_argument("--preset", help="a preset in assets/presets/ (for example marpa) whose question triage words to use")
+    ap.add_argument("--preset", help="a preset in assets/presets/ (for example example) whose question triage words to use")
     ap.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
     ap.add_argument("--no-write", action="store_true", help="do not write fable/PREFLIGHT.md and fable/preflight.json")
     args = ap.parse_args()

@@ -14,8 +14,8 @@ candidates, evidence from registered functions) plus:
   the test is blind: no function may "find" the very ruling it is tested on.
 - "adjudication" (optional): an adjudicator's answer and confidence, to
   calibrate the threshold. When it is marked "blind": true (the adjudicator
-  was asked with the case's own ruling left out of its evidence, as MARPA asks
-  Jev for its blind test), it also takes part in the verdicts, under the
+  was asked with the case's own ruling left out of its evidence, as a project may ask
+  its adjudicator for a blind test), it also takes part in the verdicts, under the
   threshold this run calibrates. Otherwise it is removed before the verdict.
 
 Output (fable/BACKTEST.md and fable/backtest.json):
@@ -92,7 +92,7 @@ def main() -> int:
     parser.add_argument("--project", required=True)
     parser.add_argument("--cases", required=True, help="JSON list of decided cases")
     parser.add_argument("--target", type=float, default=0.9, help="accuracy an adjudication threshold must reach (default 0.9)")
-    parser.add_argument("--min-accepted", type=int, default=1, help="fewest adjudications that must clear a threshold for it to count (MARPA uses 10)")
+    parser.add_argument("--min-accepted", type=int, default=1, help="fewest adjudications that must clear a threshold for it to count (for example 10)")
     parser.add_argument("--write-calibration", action="store_true", help="write the calibrated threshold to fable/calibration.json")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()

@@ -2,9 +2,8 @@ __pycache__/
 .pytest_cache/
 .venv/
 *.skill
-# Exported from MARPA's own data by export_decided_cases.py on the owner's machine.
-# It names client projects, so it stays out of this public repository.
-fable-handoff/assets/presets/marpa/decided_cases.json
-# Run output is never committed (owner, 2026-11-16): read only to troubleshoot, deleted once its finding is solved.
+# Run output is never committed: read only to troubleshoot, deleted once its finding is solved (runs/README.md).
 runs/*
 !runs/README.md
+# Exported from the firm data by export_decided_cases.py on the owner's machine; it names client projects, so it stays out of git.
+fable-handoff/assets/presets/marpa/decided_cases.json

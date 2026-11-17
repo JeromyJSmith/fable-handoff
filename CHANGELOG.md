@@ -1,12 +1,20 @@
 # Changelog
 
-## marpa branch (2026-11-16, not released)
+## marpa branch (preset only, not released)
 
-- `init_handoff.py --preset NAME` and the MARPA preset (`assets/presets/marpa/`).
-- Adjudication under a written schema (the Jev decision framework): schema, options offered, abstain exit, companions, post-checks, receipt, confidence bands.
-- `detective_backtest.py --min-accepted`, a cutoff table, blind adjudications in verdicts.
-- Weight, flats, pallets and lump sums in the units; a null tolerance is never compared.
-- Project and preset question-triage words; project owner rules; `writable_outside_paths` in the guard.
+- The MARPA preset (`assets/presets/marpa/`): three data-first stages, the firm's detective functions, evidence ladder, owner rules, Jev schemas, decision packet, desk map, and the rehearsal package (docs/rehearsal/). Everything general is on main.
+
+## Unreleased
+
+- `init_handoff.py --preset NAME [--shape NAME]`: a firm's preset (assets/presets/NAME/) merges its settings into fable/handoff.json (paths and blocked commands are added to the defaults, never replace them), adds mission and rules sections, installs per-shape mission, ledger and decisions files, and the decisions the owner must answer before launch. `assets/presets/example/` shows the shape.
+- Adjudication under a written schema (the Jev decision framework, disler/ten-levels-of-jev): a named schema, the answer among the options offered, an abstain exit never applied, companion questions, post-checks, a receipt, and confidence bands (auto, review, low).
+- `detective_backtest.py`: `--min-accepted`, a cutoff table, blind adjudications in the verdicts under the threshold the run calibrates.
+- Units for weight, flats, pallets and lump sums; a null tolerance means never compared. Registry sources may be absolute paths.
+- Readiness checks: launch requirements (functions built or planned as first tasks, files), companion repositories (own branch, clean, a map for their commit), no model calls in calculation code, decisions the owner must answer (per shape). The stop gate also refuses model calls in calculation code.
+- The guard: named writable files outside the project, companion repositories, and `unreadable_paths` (run output is never a source; Read, Grep, Glob and shell reads are blocked).
+- Question triage words and owner rules from the project's configuration; `decision_interview.py --file`.
+- `scripts/intent.py`: a condensed INTENT.md from the conversation logs, with a section for data lost or regressed and whether each was resolved.
+- runs/ holds run output and is never committed. The test suite fails if it changes any path outside the repository and the temporary folders that a preset names.
 
 ## 1.3.1 (2026-11-16)
 

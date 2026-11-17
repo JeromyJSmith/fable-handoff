@@ -225,7 +225,7 @@ for _rule in OWNER_RULES:
 
 # A project or preset adds its own owner rules in fable/handoff.json:
 #   owner_rule_headings: regular expressions for headings whose lines are the
-#     owner's rules (MARPA: "Rules for every agent in this repository");
+#     owner's rules (for example "Rules for every agent in this repository");
 #   owner_rules: entries shaped like OWNER_RULES ({kind, patterns, effect,
 #     how}); "blocks" makes the readiness check refuse to launch.
 # They are checked before the built-in rules, so a project names its own.

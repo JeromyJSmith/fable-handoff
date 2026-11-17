@@ -129,8 +129,8 @@ def parse_args():
     parser.add_argument("--ownership", action="store_true", help="tell the model the codebase is its own, so that it refactors as it goes. Leave off for client or shared code.")
     parser.add_argument("--force", action="store_true", help="overwrite existing package files, including a mission and ledger you have filled in. Commit first.")
     parser.add_argument("--from-preflight", action="store_true", help="use fable/preflight.json from preflight.py: its verify command when --verify-command is not given, its paths to protect, and its open acceptance criteria as the first tasks in fable/STATE.md. Check each before launch.")
-    parser.add_argument("--preset", default=None, metavar="NAME", help="merge a firm's preset from assets/presets/NAME/ (for example marpa) into fable/handoff.json and the mission and rules. Options given on the command line win over the preset.")
-    parser.add_argument("--shape", default=None, metavar="NAME", help="with --preset: one of the preset's mission shapes (for MARPA: single, stage1, stage2)")
+    parser.add_argument("--preset", default=None, metavar="NAME", help="merge a firm's preset from assets/presets/NAME/ (for example example) into fable/handoff.json and the mission and rules. Options given on the command line win over the preset.")
+    parser.add_argument("--shape", default=None, metavar="NAME", help="with --preset: one of the preset's mission shapes (for example stage1, stage2)")
     parser.add_argument("--question-system", default=None, metavar="TYPE:WHERE",
                         help="where questions for the owner live: json:<path> (default fable/open_decisions.json), bcf:<path to .bcf>, markdown:<path to the decisions file>, or github:<owner/repo>")
     parser.add_argument("--decisions-log", default=None, metavar="PATH", help="the project's own decisions log; decisions are written there instead of fable/DECISIONS.md")
