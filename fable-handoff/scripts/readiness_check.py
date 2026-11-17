@@ -488,6 +488,10 @@ def check_standards(project, config):
         if not command:
             rows.append(("FAIL", "standards check", "'%s' names no command" % name))
             continue
+        missing = [w for w in re.findall(r"[\w./-]+\.(?:py|sh|jq|sql|js|ts|mjs)\b", command) if not (project / w).exists() and not Path(w).exists()]
+        if missing:
+            rows.append(("FAIL", "standards check", "'%s' names %s, which does not exist, so the check could never pass" % (name, ", ".join(missing))))
+            continue
         code, output, _ = run_shell(command, project, int(check.get("timeout_seconds") or 1800))
         if code is None:
             rows.append(("FAIL", "standards check", "'%s' did not finish in time" % name))
@@ -497,6 +501,20 @@ def check_standards(project, config):
         else:
             rows.append(("PASS", "standards check", "'%s' runs (%s now); it must pass before the run may stop" % (name, "passing" if code == 0 else "failing")))
     return rows
+
+
+def check_shared_data(project, config):
+    """Data a fresh checkout lacks (git-ignored), taken from the main checkout through links (shared_data)."""
+    spec = config.get("shared_data") or {}
+    paths = spec.get("paths") or []
+    if not paths:
+        return []
+    missing = [p for p in paths if not (project / p).exists()]
+    if missing:
+        return [("FAIL", "shared data", "%s missing here (git-ignored data the run reads). Link them from %s: uv run --script <skill>/scripts/link_shared_data.py --project ." % (
+            short_list(missing), spec.get("from") or "the main checkout"))]
+    linked = [p for p in paths if (project / p).is_symlink()]
+    return [("PASS", "shared data", "%d path(s) present%s" % (len(paths), ", %d linked from %s" % (len(linked), spec.get("from")) if linked else ""))]
 
 
 def check_companions(config):
@@ -579,7 +597,7 @@ def check_secrets(project):
 # command like `python3 -m pytest` fails this way forever.
 CANNOT_RUN = re.compile(
     r"No module named|ModuleNotFoundError|command not found|: not found\b|No such file or directory|"
-    r"error: Failed to spawn|ImportError while loading conftest",
+    r"error: Failed to spawn|ImportError while loading conftest|file or directory not found",
     re.IGNORECASE,
 )
 
@@ -854,6 +872,7 @@ def main():
     rows += check_model_calls(project, config)
     rows += check_owner_decisions(project, config)
     rows += check_standards(project, config)
+    rows += check_shared_data(project, config)
     rows += branch_rows
     if is_repo:
         rows += check_git_clean(dirty_before, dirty_after, args.allow_dirty)
