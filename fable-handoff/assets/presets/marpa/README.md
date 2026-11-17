@@ -98,6 +98,15 @@ After the standard's class ladder became rule evidence (standard repository deci
 
 The real result is 30 right, 1 wrong and 6 open. 24 cases are settled by the held-out ladder's name rungs and 6 by adjudication. The wrong case is still the beach cobble. The cutoff table and the 0.88 threshold are unchanged. The test now fails if any case carries its own answer outside its ruling.
 
+## Starting stage 1 from a fresh worktree
+
+1. Install the skill at a commit: `curl -fsSL https://raw.githubusercontent.com/JeromyJSmith/fable-handoff/marpa/install.sh | bash -s -- --ref <commit>`. `--ref` takes a branch, a tag or a commit.
+2. Create the package and the branch: `uv run --script <skill>/scripts/init_handoff.py --project . --preset marpa --shape stage1 --create-branch`. It switches to `fable/marpa-stage1`, creating it when needed.
+3. Link the git-ignored data from the main checkout: `uv run --script <skill>/scripts/link_shared_data.py --project .`. Every path git ignores there, minus environments, caches, locks and scratch, becomes a link. Nothing is overwritten. Database writes still go through the writer lock, so the one working database stays the only one.
+4. Commit the package, then run `uv run --script <skill>/scripts/readiness_check.py --project .`.
+
+Proven on 2026-11-17 on a fresh clone of a full copy of the standard repository: 42 paths linked. Readiness gave 29 passed, 1 warning (the absolute paths in AGENTS.md) and 1 failure: the standard repository's tests/test_detective.py rewrites the tracked detective_cutoff.json. That fix belongs to the standard repository and has been handed to its session.
+
 ## Rebuilding the decided cases
 
 `decided_cases.json` names client projects, so it is not in this public repository. Rebuild it on the owner's machine, read only:
