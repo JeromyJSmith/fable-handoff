@@ -64,13 +64,21 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--project", required=True)
     ap.add_argument("--check", action="store_true", help="report what is present, linked or missing; change nothing")
+    ap.add_argument("--preset", help="read shared_data from this preset (before init has written fable/handoff.json)")
+    ap.add_argument("--from", dest="source", help="the main checkout, in place of shared_data.from")
     args = ap.parse_args()
     project = Path(args.project).expanduser().resolve()
     try:
-        spec = json.loads((project / "fable" / "handoff.json").read_text(encoding="utf-8")).get("shared_data") or {}
+        if args.preset:
+            preset = json.loads((Path(__file__).resolve().parent.parent / "assets" / "presets" / args.preset / "preset.json").read_text(encoding="utf-8"))
+            spec = (preset.get("config") or {}).get("shared_data") or {}
+        else:
+            spec = json.loads((project / "fable" / "handoff.json").read_text(encoding="utf-8")).get("shared_data") or {}
     except (OSError, ValueError) as error:
-        print("cannot read fable/handoff.json: %s" % error, file=sys.stderr)
+        print("cannot read the shared_data settings: %s" % error, file=sys.stderr)
         return 1
+    if args.source:
+        spec = dict(spec, **{"from": args.source})
     source = Path(os.path.expanduser(str(spec.get("from") or ""))).resolve() if spec.get("from") else None
     paths = shared_paths(spec)
     if not paths:

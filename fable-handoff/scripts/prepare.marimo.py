@@ -48,6 +48,7 @@ def setup():
     _ap.add_argument("--verify-command")
     _ap.add_argument("--apply-settings", action="store_true")
     _ap.add_argument("--max-budget-usd", type=float)
+    _ap.add_argument("--shared-from")
     _argv = [a for a in sys.argv[1:] if a != "--"]
     _cli = mo.cli_args()
     if _cli:
@@ -62,7 +63,7 @@ def setup():
     args = _ap.parse_args(_argv)
     ctx = prep.Ctx(project=Path(args.project).expanduser().resolve(), preset=args.preset, shape=args.shape, logs=args.logs,
                    no_logs=args.no_logs, goal=args.goal, verify_command=args.verify_command, apply_settings=args.apply_settings,
-                   max_budget_usd=args.max_budget_usd)
+                   max_budget_usd=args.max_budget_usd, shared_from=args.shared_from)
     progress = wigglystuff.ProgressBar(value=0, max_value=8)
     trace = wigglystuff.TraceView(spans=[], title="Preparation")
     return ctx, mo, prep, progress, trace
