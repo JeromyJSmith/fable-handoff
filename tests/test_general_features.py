@@ -400,3 +400,77 @@ def test_an_adjudicated_answer_may_not_break_a_rule_of_the_standard(tmp_path):
     # a rule scoped to other schemas does not apply
     cfg["adjudication_policy"]["answer_rules"][0]["schemas"] = ["item_name"]
     assert detective().verdict(case, cfg, tmp_path)["verdict"] == "settled by adjudication"
+
+
+# --------------------------------------------------------------------------- install
+
+def test_install_takes_a_branch_a_tag_or_a_commit(tmp_path):
+    import subprocess
+    repo = tmp_path / "origin"
+    subprocess.run(["git", "clone", "-q", str(SKILL.parent), str(repo)], check=True)
+    for cmd in (["config", "user.email", "t@example.com"], ["config", "user.name", "t"]):
+        subprocess.run(["git", "-C", str(repo), *cmd], check=True)
+    first = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    (repo / "fable-handoff" / "MARKER.txt").write_text("later\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "later"], check=True)
+    subprocess.run(["git", "-C", str(repo), "tag", "t1"], check=True)
+    branch = subprocess.run(["git", "-C", str(repo), "branch", "--show-current"], capture_output=True, text=True).stdout.strip()
+    env = {"FABLE_HANDOFF_REPO": "file://%s" % repo}
+    for ref, marker in ((branch, True), ("t1", True), (first, False), (first[:7], False)):
+        dest = tmp_path / ("dest-" + ref[:7])
+        proc = run(["bash", str(SKILL.parent / "install.sh"), "--ref", ref, "--dest", str(dest)], env=env)
+        assert proc.returncode == 0, (ref, proc.stderr)
+        installed = (dest / "fable-handoff" / ".installed-from").read_text()
+        assert ("ref=%s" % ref) in installed and (dest / "fable-handoff" / "MARKER.txt").exists() is marker, ref
+        if not marker:
+            assert ("commit=%s" % first) in installed
+    proc = run(["bash", str(SKILL.parent / "install.sh"), "--ref", "nosuchref", "--dest", str(tmp_path / "x")], env=env)
+    assert proc.returncode == 1 and "no branch, tag or commit named nosuchref" in proc.stderr
+
+
+def test_a_standards_check_that_names_a_missing_file_fails(tmp_path):
+    from conftest import prepared_project
+    project = prepared_project(tmp_path)
+    write_cfg(project, standards_checks=[{"name": "numbering", "command": "uv run pytest -q tests/test_numbering.py"}])
+    commit_all(project, "check")
+    _, data = readiness(project)
+    row = next(r for r in data["rows"] if r["check"] == "standards check")
+    assert row["status"] == "FAIL" and "tests/test_numbering.py, which does not exist" in row["detail"]
+    (project / "tests").mkdir()
+    (project / "tests/test_numbering.py").write_text("def test_x():\n    assert False\n")
+    commit_all(project, "test file")
+    _, data = readiness(project)
+    assert statuses(data)["standards check"] == "PASS"
+
+
+def test_init_can_create_and_switch_to_the_runs_branch(tmp_path):
+    project = bare_project(tmp_path)
+    proc = run([*script("init_handoff.py"), "--project", str(project), "--preset", "example", "--shape", "stage2", "--apply-settings", "--create-branch"])
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(proc.stdout)["branch"] == "on fable/example-stage2"
+    assert git(project, "branch", "--show-current").stdout.strip() == "fable/example-stage2"
+
+
+def test_a_worktree_links_the_shared_data_from_the_main_checkout_without_overwriting(tmp_path):
+    main = tmp_path / "main"
+    (main / "data/loaded").mkdir(parents=True)
+    (main / "data/loaded/rows.ndjson").write_text("{}\n")
+    (main / "store.duckdb").write_text("db")
+    project = bare_project(tmp_path, "worktree")
+    assert init(project).returncode == 0
+    (project / "kept.txt").write_text("mine\n")
+    write_cfg(project, shared_data={"from": str(main), "paths": ["data/loaded", "store.duckdb", "kept.txt", "absent.json"]})
+    commit_all(project, "shared data")
+    _, data = readiness(project)
+    row = next(r for r in data["rows"] if r["check"] == "shared data")
+    assert row["status"] == "FAIL" and "link_shared_data.py" in row["detail"]
+    proc = run([*script("link_shared_data.py"), "--project", str(project)])
+    report = {p["path"]: p["state"] for p in json.loads(proc.stdout)["paths"]}
+    assert report == {"data/loaded": "linked now", "store.duckdb": "linked now", "kept.txt": "present", "absent.json": "missing in the main checkout too"}
+    assert proc.returncode == 1 and (project / "kept.txt").read_text() == "mine\n"
+    assert (project / "data/loaded/rows.ndjson").read_text() == "{}\n" and (project / "store.duckdb").is_symlink()
+    write_cfg(project, shared_data={"from": str(main), "paths": ["data/loaded", "store.duckdb", "kept.txt"]})
+    commit_all(project, "fewer")
+    _, data = readiness(project)
+    assert statuses(data)["shared data"] == "PASS" and "2 linked" in next(r for r in data["rows"] if r["check"] == "shared data")["detail"]

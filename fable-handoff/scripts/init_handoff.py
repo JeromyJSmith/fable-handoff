@@ -28,6 +28,7 @@ import hashlib
 import importlib.util
 import json
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -131,6 +132,7 @@ def parse_args():
     parser.add_argument("--from-preflight", action="store_true", help="use fable/preflight.json from preflight.py: its verify command when --verify-command is not given, its paths to protect, and its open acceptance criteria as the first tasks in fable/STATE.md. Check each before launch.")
     parser.add_argument("--preset", default=None, metavar="NAME", help="merge a firm's preset from assets/presets/NAME/ (for example example) into fable/handoff.json and the mission and rules. Options given on the command line win over the preset.")
     parser.add_argument("--shape", default=None, metavar="NAME", help="with --preset: one of the preset's mission shapes (for example stage1, stage2)")
+    parser.add_argument("--create-branch", action="store_true", help="switch the project to the run's branch (from --branch, or the preset's shape), creating it from the current commit when it does not exist yet")
     parser.add_argument("--question-system", default=None, metavar="TYPE:WHERE",
                         help="where questions for the owner live: json:<path> (default fable/open_decisions.json), bcf:<path to .bcf>, markdown:<path to the decisions file>, or github:<owner/repo>")
     parser.add_argument("--decisions-log", default=None, metavar="PATH", help="the project's own decisions log; decisions are written there instead of fable/DECISIONS.md")
@@ -338,7 +340,7 @@ PRESET_ADDS = ("protected_paths", "blocked_bash_patterns")
 PRESET_KEYS = (
     "verify_command", "verify_timeout_seconds", "question_system", "decisions_log", "evidence_ladder", "detective_functions",
     "quantity_tolerance", "adjudication_threshold", "adjudication_policy", "question_triage", "owner_rules",
-    "owner_rule_headings", "writable_outside_paths", "audit_accept", "preset", "launch_requires", "companion_repositories", "budget_tolerance", "deterministic_code", "related_locations", "definition_of_done", "final_phase", "shape", "branch", "pre_launch_decisions", "desk_deferred", "unreadable_paths", "standards_checks",
+    "owner_rule_headings", "writable_outside_paths", "audit_accept", "preset", "launch_requires", "companion_repositories", "budget_tolerance", "deterministic_code", "related_locations", "definition_of_done", "final_phase", "shape", "branch", "pre_launch_decisions", "desk_deferred", "shared_data", "unreadable_paths", "standards_checks",
 ) + PRESET_ADDS
 
 
@@ -555,7 +557,21 @@ def main():
         separator = "" if existing == "" or existing.endswith("\n") else "\n"
         gitignore.write_text(existing + separator + "fable/.run/\n", encoding="utf-8")
 
+    branch_note = None
+    if args.create_branch:
+        wanted = str(config.get("branch") or "")
+        def git(*a):
+            return subprocess.run(["git", "-C", str(project), *a], capture_output=True, text=True)
+        current = git("branch", "--show-current").stdout.strip()
+        if wanted and current != wanted:
+            exists = git("rev-parse", "--verify", "--quiet", "refs/heads/" + wanted).returncode == 0
+            done = git("switch", "-q", wanted) if exists else git("switch", "-q", "-c", wanted)
+            branch_note = ("on %s" % wanted) if done.returncode == 0 else ("could not switch to %s: %s" % (wanted, done.stderr.strip()[:200]))
+        else:
+            branch_note = "on %s" % (current or "?")
+
     print(json.dumps({
+        "branch": branch_note,
         "project": str(project),
         "created": created,
         "skipped_existing": skipped,
