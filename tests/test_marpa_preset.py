@@ -516,3 +516,92 @@ def test_a_source_outside_the_project_is_checked_by_its_absolute_path(tmp_path):
                                     "test": "t", "project_sources": [str(outside), str(tmp_path / "allocation" / "MISSING.md")]}]}
     problems = dm.registry_problems(cfg, tmp_path / "proj")
     assert problems == ["'back-test' reads %s, which matches nothing in this project" % (tmp_path / "allocation" / "MISSING.md")]
+
+
+# --------------------------------------------------------------------------- the desk map
+
+def desk_map_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("marpa_desk_map", PRESET_DIR / "desk_map.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def fake_desk(tmp_path):
+    desk = tmp_path / "desk"
+    (desk / "src/lib/desk").mkdir(parents=True)
+    (desk / "src/components/worksheet").mkdir(parents=True)
+    (desk / "src-tauri/src").mkdir(parents=True)
+    (desk / "src/lib/desk/featureRegistry.ts").write_text(
+        'export const FEATURES = {\n  sheet: {\n    group: "documents",\n  },\n  docs: {\n    group: "documents",\n  },\n'
+        '  database: {\n    group: "database",\n  },\n  pipeline: {\n    group: "diagnostics",\n  },\n};\n')
+    (desk / "src/components/worksheet/AppShell.tsx").write_text(
+        'import { Sheet } from "./Sheet";\nimport Docs from "./Docs";\nimport { DatabaseView } from "../db/DatabaseView";\nimport { Pipeline } from "../pipe/Pipeline";\n'
+        'export const AppShell = ({ view }) => view === "database" ? (<DatabaseView />) : view === "pipeline" ? (<Pipeline />)'
+        ' : view === "docs" ? (<Docs />) : view === "sheet" ? (<Sheet />) : null;\n')
+    (desk / "src/components/worksheet/Sheet.tsx").write_text('import { invoke } from "@tauri-apps/api/core";\ninvoke("save_budget");\n')
+    (desk / "src/components/db/DatabaseView.tsx").parent.mkdir(parents=True)
+    (desk / "src/components/db/DatabaseView.tsx").write_text('invoke("pxt_query");\n')
+    (desk / "src-tauri/src/lib.rs").write_text('#[tauri::command]\npub fn save_budget() {}\n#[tauri::command]\nasync fn pxt_query() {}\n#[tauri::command]\nfn unused_cmd() {}\n')
+    mods = {
+        "src/router.tsx": ["src/components/worksheet/AppShell.tsx"],
+        "src/components/worksheet/AppShell.tsx": ["src/components/worksheet/Sheet.tsx", "src/components/worksheet/Docs.tsx",
+                                                  "src/components/db/DatabaseView.tsx", "src/components/pipe/Pipeline.tsx"],
+        "src/components/worksheet/Sheet.tsx": ["src/lib/workbook/types.ts"],
+        "src/components/worksheet/Docs.tsx": [],
+        "src/components/db/DatabaseView.tsx": ["src/lib/workbook/types.ts", "src/lib/db/query.ts"],
+        "src/components/pipe/Pipeline.tsx": ["src/lib/db/query.ts"],
+        "src/lib/workbook/types.ts": [], "src/lib/db/query.ts": [], "src/lib/old/orphan.ts": [],
+    }
+    spec = {"./Sheet": "src/components/worksheet/Sheet.tsx", "./Docs": "src/components/worksheet/Docs.tsx",
+            "../db/DatabaseView": "src/components/db/DatabaseView.tsx", "../pipe/Pipeline": "src/components/pipe/Pipeline.tsx"}
+    dc = {"modules": []}
+    for src, deps in mods.items():
+        entry = {"source": src, "dependencies": [{"resolved": d, "module": d} for d in deps]}
+        if src.endswith("AppShell.tsx"):
+            entry["dependencies"] = [{"resolved": r, "module": m} for m, r in spec.items()]
+        dc["modules"].append(entry)
+    return desk, dc
+
+
+def test_the_desk_map_sorts_files_into_needed_shared_and_safe_to_remove(tmp_path):
+    dm = desk_map_module()
+    desk, dc = fake_desk(tmp_path)
+    sets = dm.keep_cut(desk, dc, ["documents"], ["database", "diagnostics"])
+    assert sets["kept_view_components"] == ["src/components/worksheet/Docs.tsx", "src/components/worksheet/Sheet.tsx"]
+    assert sets["cut_view_components"] == ["src/components/db/DatabaseView.tsx", "src/components/pipe/Pipeline.tsx"]
+    assert sets["shared"] == ["src/lib/workbook/types.ts"]
+    assert sets["safe_to_remove"] == ["src/components/db/DatabaseView.tsx", "src/components/pipe/Pipeline.tsx", "src/lib/db/query.ts"]
+    assert "src/components/worksheet/AppShell.tsx" in sets["needed"] and "src/lib/db/query.ts" not in sets["needed"]
+    assert sets["reached_by_neither"] == ["src/lib/old/orphan.ts"]
+    assert sets["largest_shared"][0] == {"file": "src/lib/workbook/types.ts", "imported_by": 2}
+    links = dm.tauri_links(desk, sets)
+    assert links["rust_commands"] == 3 and links["rust_commands_never_called"] == ["unused_cmd"]
+    assert links["commands_only_for_cut_features"] == ["pxt_query"] and links["called_but_not_in_rust"] == []
+    order = dm.work_order({"commit": "abc123456", "date": "2026-11-17", "needed": 4, "shared": 1, "safe_to_remove": 3, "reached_by_neither": 1,
+                           "largest_shared": sets["largest_shared"], "tauri": links}, sets)
+    assert "Desk cut work order (desk commit abc123456" in order and "`pxt_query`" in order and "`src/lib/db/query.ts`" in order
+
+
+def test_readiness_refuses_a_desk_that_has_no_map_for_its_commit(tmp_path):
+    from conftest import prepared_project
+    project = prepared_project(tmp_path)
+    desk = bare_project(tmp_path, "desk")
+    git(desk, "switch", "-qc", "fable/marpa-1")
+    (desk / ".gitignore").write_text((desk / ".gitignore").read_text() + "var/\n")
+    commit_all(desk, "ignore var")
+    write_cfg(project, companion_repositories=[{"path": str(desk), "branch": "fable/marpa-1", "map": "var/reference/desk-map/*_{commit}/keep-cut.json"}])
+    commit_all(project, "companion with map")
+    _, data = readiness(project)
+    row = next(r for r in data["rows"] if r["check"] == "companion desk map")
+    commit = git(desk, "rev-parse", "--short=9", "HEAD").stdout.strip()
+    assert row["status"] == "FAIL" and commit in row["detail"]
+    (desk / "var/reference/desk-map/2026-11-17_0000000aa").mkdir(parents=True)
+    (desk / "var/reference/desk-map/2026-11-17_0000000aa/keep-cut.json").write_text("{}")
+    _, data = readiness(project)
+    assert statuses(data)["companion desk map"] == "FAIL", "a map of another commit does not count"
+    (desk / ("var/reference/desk-map/2026-11-17_%s" % commit)).mkdir(parents=True)
+    (desk / ("var/reference/desk-map/2026-11-17_%s/keep-cut.json" % commit)).write_text("{}")
+    _, data = readiness(project)
+    assert statuses(data)["companion desk map"] == "PASS" and statuses(data)["companion desk"] == "PASS"

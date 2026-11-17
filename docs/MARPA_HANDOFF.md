@@ -248,3 +248,8 @@ its project document place under groundcovers, ruled flatwork); 7 open.
 The decided set names client projects, so it is rebuilt locally by
 `export_decided_cases.py` and kept out of git.
 
+
+### 2026-11-17 steps
+
+- Allowance method (4574f64): mission rebuilt on the allocation engine; definition of done as stop condition; no model calls in calculations (readiness and stop gate).
+- Desk map: `assets/presets/marpa/desk_map.py` on a clean clone of the desk at e50a89362. dependency-cruiser 18.8.0 refuses TypeScript 7.0.2, so it parses with @swc/core 1.16.22. 661 source modules: 334 needed by the kept features, 136 shared, 105 safe to remove, 222 reached by neither (mostly tests). knip 6.45.1: 15 unused files, no kept file flagged unused, route `src/routes/assistant.tsx` not flagged. Tauri: 47 commands called, 88 in Rust, 41 never called, 10 only for cut features. cargo-modules: 63 modules. vulture 2.16: 65 findings in 3,389 Python files. graphify 0.9.111 code-only: 28,610 nodes, 1,020 communities; import counts match dependency-cruiser on 6 of 8 files checked. Outputs: the desk's ignored `var/reference/desk-map/2026-11-16_e50a89362/`. Readiness refuses a desk without a map for its commit. Understand Anything moved to the final phase.

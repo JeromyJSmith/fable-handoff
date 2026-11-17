@@ -476,6 +476,14 @@ def check_companions(config):
             rows.append(("FAIL", label, "uncommitted changes: %s. Commit them first, so the run's diff there shows only its work." % short_list(dirty_paths(root))))
         else:
             rows.append(("PASS", label, "on %s, clean; tests: %s" % (branch, c.get("test_command") or "none named")))
+        if c.get("map"):
+            # A preparation map that must exist for the very commit the run starts from.
+            commit = git(root, "rev-parse", "--short=9", "HEAD").stdout.strip()
+            pattern = str(c["map"]).replace("{commit}", commit)
+            if not list(root.glob(pattern)):
+                rows.append(("FAIL", label + " map", "no map for commit %s (%s). Map a clean copy at that commit first, for example with the preset's desk_map.py" % (commit, pattern)))
+            else:
+                rows.append(("PASS", label + " map", "mapped at commit %s" % commit))
     return rows
 
 
