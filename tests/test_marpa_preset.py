@@ -58,10 +58,10 @@ def test_init_with_the_marpa_preset_writes_marpas_configuration(tmp_path):
     cfg = read_cfg(project)
     names = [f["name"] for f in cfg["detective_functions"]]
     assert names == ["name match", "drawing content", "text on the drawing", "spatial relationships", "budget match",
-                     "rules and precedent", "the firm's own words", "outside standards", "back-test", "gap analysis", "adjudication"]
+                     "takeoff from geometry", "rules and precedent", "the firm's own words", "outside standards", "back-test", "gap analysis", "adjudication"]
     assert not any(f.get("generic") for f in cfg["detective_functions"])
     planned = {f["name"] for f in cfg["detective_functions"] if f["status"] == "planned"}
-    assert planned == {"spatial relationships", "the firm's own words", "outside standards", "back-test", "gap analysis"}
+    assert planned == {"spatial relationships", "takeoff from geometry", "the firm's own words", "outside standards", "back-test", "gap analysis"}
     assert [r["rung"] for r in cfg["evidence_ladder"]] == ["drawings and models", "the project's budget", "the standard and class vocabulary",
                                                           "rulings and decisions", "the firm's own words", "outside standards", "back-tests on past projects"]
     assert cfg["question_system"] == {"type": "bcf", "path": "bcf/fable-questions.bcf"}
@@ -76,7 +76,10 @@ def test_init_with_the_marpa_preset_writes_marpas_configuration(tmp_path):
     # the command line wins over the preset: conftest's init passed its own verify command
     assert cfg["verify_command"] != PRESET["config"]["verify_command"]
     mission = (project / "fable/MISSION.md").read_text()
-    assert mission.index("## MARPA") < mission.index("## Done") and "class-word grammar" in mission
+    assert mission.index("## MARPA") < mission.index("\n## Done") and "class-word grammar" in mission
+    # the owner's product direction: takeoff, the back-test against real budgets, Solomon, intake to budget, two repositories
+    for words in ["Takeoff from geometry", "budget_backtest.py --check", "marpa_solomon_2605", "Intake ends in the budget", "a second run"]:
+        assert words in mission, words
     rules = (project / "fable/OPERATING_RULES.md").read_text()
     assert rules.rstrip().endswith("Never a bare decision number.") and "writer_lock.py take" in rules
 
@@ -86,7 +89,7 @@ def test_the_preset_verify_command_is_used_when_none_is_given(tmp_path):
     proc = run([*script("init_handoff.py"), "--project", str(project), "--preset", "marpa", "--apply-settings"])
     assert proc.returncode == 0, proc.stderr
     cfg = read_cfg(project)
-    assert cfg["verify_command"] == "uv run pytest -q tests" and cfg["verify_timeout_seconds"] == 3600
+    assert cfg["verify_command"] == "uv run pytest -q tests && uv run budget_backtest.py --check" and cfg["verify_timeout_seconds"] == 3600
 
 
 def test_an_unknown_preset_is_refused_and_writes_nothing(tmp_path):

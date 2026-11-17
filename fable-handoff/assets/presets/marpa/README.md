@@ -18,7 +18,7 @@ uv run --script scripts/init_handoff.py --project <MARPA repo> --preset marpa --
 
 | Area | In preset.json | MARPA source |
 | --- | --- | --- |
-| Detective functions | `detective_functions`: the eleven functions, five of them planned | `detective_functions.yaml`, `docs/standard/DETECTIVE_STANDARD.md` |
+| Detective functions | `detective_functions`: MARPA's eleven functions plus takeoff from geometry (`vwx/out/vwx_geometry.duckdb`), six of them planned | `detective_functions.yaml`, `docs/standard/DETECTIVE_STANDARD.md` |
 | Evidence ladder | `evidence_ladder`: drawings and models, the project's budget, the standard and class vocabulary, rulings and decisions, the firm's own words, outside standards, back-tests | CLAUDE.md rule 12 |
 | Units and tolerances | `quantity_tolerance`: area 5%, length 5%, count exact, volume 10%, weight never compared, flats and pallets counted only | `detective_functions.yaml` |
 | Questions for the firm | `question_system`: BCF 3.0 at `bcf/fable-questions.bcf` | MARPA's own `bcf/marpa-questions.bcf` is written only by `bcf_questions.py`, so the run keeps its own file |
@@ -28,8 +28,8 @@ uv run --script scripts/init_handoff.py --project <MARPA repo> --preset marpa --
 | Question triage | `question_triage`: firm-choice words (design intent, client preference, allowance, fee policy, insurance rate) and fact words (dimensions, labels, quantities, species, units, slots) | |
 | Owner rules | `owner_rule_headings` and `owner_rules`: all thirteen rules of MARPA's CLAUDE.md are recognised and honored | CLAUDE.md |
 | Guard | `protected_paths` (rulings, Jev schemas, the cutoff file, the writer lock, DuckDB files, the budget workbooks, MARPA's BCF file, CLAUDE.md, AGENTS.md, archives, Jev receipts); `blocked_bash_patterns` (the desk app's Pixeltable, mail, GitHub issues and pull requests, breaking the writer lock); `writable_outside_paths` (the firm's task log) | CLAUDE.md rules 1, 7 and 10 |
-| Verify command | `uv run pytest -q tests` | |
-| Mission and rules | `MISSION_MARPA.md` (where things are, the class-word grammar, the pipe) and `OPERATING_RULES_MARPA.md` | |
+| Verify command | `uv run pytest -q tests && uv run budget_backtest.py --check`: the run writes `budget_backtest.py`, which generates each past project's budget from its drawing and compares it with the real one; it fails until that holds | The owner's direction, 2026-11-16 |
+| Mission and rules | `MISSION_MARPA.md`: the product (a dropped drawing becomes a priced, editable budget), the five steps (takeoff from geometry, the back-test against real budgets, Solomon's first estimate, intake ending in the budget, the API for the desk), what is out of scope, where things are, and MARPA's definition of done. `OPERATING_RULES_MARPA.md` | The owner's direction, 2026-11-16 |
 
 The standard files (MARPA_STANDARD.md, the class vocabulary, the master slots) are not protected, because the owner's rule 4 says a fix goes into them in the same task.
 
@@ -93,6 +93,10 @@ Verdicts: 29 right (all settled by adjudication), 1 wrong, 7 open. The wrong one
 uv run --script assets/presets/marpa/export_decided_cases.py --marpa <MARPA repo> --out assets/presets/marpa/decided_cases.json
 uv run --script scripts/detective_backtest.py --project <project> --cases assets/presets/marpa/decided_cases.json --min-accepted 10 --target 0.9 --write-calibration
 ```
+
+## Two repositories
+
+A handoff prepares one project. This preset's project is the standard repository (API, takeoff, pricing, back-test). The desk app (`/Volumes/MARPA/apps/marpa-desk`) is its own repository, so its screens are a second run, prepared with this preset on that repository once the API holds; the mission lists it as out of scope. A preset variant for the desk repository is planned.
 
 ## Still planned
 

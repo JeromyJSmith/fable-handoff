@@ -5,7 +5,7 @@
  "operating_rules_section": "OPERATING_RULES_MARPA.md",
  "config": {
   "preset": "marpa",
-  "verify_command": "uv run pytest -q tests",
+  "verify_command": "uv run pytest -q tests && uv run budget_backtest.py --check",
   "verify_timeout_seconds": 3600,
   "question_system": {
    "type": "bcf",
@@ -86,14 +86,14 @@
    },
    {
     "name": "spatial relationships",
-    "looks_at": "nearness, containment and adjacency to classes already placed (a wall beside a pool, a material inside a titled detail frame)",
+    "looks_at": "nearness, containment and adjacency to classes already placed (a wall beside a pool, a material inside a titled detail frame); read from the decoded geometry (polygons and paths) in vwx/out/vwx_geometry.duckdb",
     "returns": "the slot of the detail or element that contains or adjoins the class",
     "strength": "supporting",
     "status": "planned",
     "test": "none yet; needs polygon joins in DuckDB spatial (only bounding boxes exist today)",
     "project_sources": [
-     "ndjson/raw/detail_elevation_callout.ndjson",
-     "ndjson/raw/drawn_object.ndjson"
+     "vwx/out/vwx_geometry.duckdb",
+     "ndjson/raw/detail_elevation_callout.ndjson"
     ],
     "strong_when": "the class is contained in a titled detail"
    },
@@ -106,9 +106,24 @@
     "test": "MARPA tests/test_detective.py::test_budget_match",
     "project_sources": [
      "ndjson/raw/budget_line.ndjson",
-     "budget_standard.yaml"
+     "budget_standard.yaml",
+     "vwx/out/vwx_geometry.duckdb"
     ],
-    "strong_when": "the drawn quantity agrees with a budget line within quantity_tolerance (quantity comparison planned)"
+    "strong_when": "the takeoff quantity of the class agrees with a budget line within quantity_tolerance"
+   },
+   {
+    "name": "takeoff from geometry",
+    "looks_at": "the decoded drawing geometry per class and per standard item: polygon areas, path lengths and symbol counts, in the units the budget uses",
+    "returns": "the quantity of each standard item the drawing shows; a paver polygon's area is the paver line's square footage",
+    "strength": "strong",
+    "status": "planned",
+    "weak_when": "only bounding boxes exist for the class (today's geometry store holds boxes for most objects)",
+    "test": "budget_backtest.py: takeoff times each past project's own rates against its real budget, line by line, within quantity_tolerance",
+    "project_sources": [
+     "vwx/out/vwx_geometry.duckdb",
+     "vwx/pipeline/s04_transform.py",
+     "budget_standard.yaml"
+    ]
    },
    {
     "name": "rules and precedent",

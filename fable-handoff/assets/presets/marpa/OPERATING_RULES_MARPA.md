@@ -1,5 +1,7 @@
 ## MARPA
 
+- Quantities come from the drawing's geometry, never typed in. Each budget line records the class, the geometry it was measured from, the unit, the rate and where the rate came from.
+- A gap between a generated budget and the firm's real one is explained in plain words (a missing class, a rate, a rounding, a line the drawing does not show) or parked as a question. Never close a gap by changing the real budget or the tolerance.
 - Take the writer lock before any write to the working database: set MARPA_AGENT to this run's branch name and run writer_lock.py take. If another agent holds the lock, park the task and continue with work that does not write the database. Release the lock when you stop writing.
 - Write the database only through run_pipeline.sh or rebuild.sh, which archive it first.
 - Adjudication is Jev under a written schema. An adjudication record in a case names its schema from jev_schemas.yaml, lists the options offered, gives the answer, the confidence, the companions' answers, the result of each post-check and the receipt path in jev-receipts/. An answer below the gate is kept as the suggestion and settles nothing. The OTHER answer is never applied.
