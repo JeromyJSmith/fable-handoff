@@ -22,3 +22,10 @@ One document for every finding taken from run output (the owner's rule of 2026-1
 - **Seen:** intent.py on the standard repository's conversation logs lists "10.7%, 2 WEEKS" as lost.
 - **Cause, from the firm's task log:** a rewording inside text_functions.yaml changed the Jev schema's fingerprint, and the next pipeline run rebuilt `text_function` empty. The wording was restored and the table rebuilt (2,075 rows).
 - **State:** open. The latest messages ask where the Ulm slope (10.7%) and the "2 WEEKS" note now sit in the working database; a plain-text search of `text_function` found neither. This belongs to the MARPA Standard session's stage 1 audit.
+
+## The standard repository's tests rewrote detective_cutoff.json
+
+- **Seen:** readiness failed "git clean" on a fresh worktree: every verify run left the tracked `detective_cutoff.json` changed (its measured_on date).
+- **Cause:** `tests/test_detective.py` called `detective.blind()`, which wrote the tracked file.
+- **Fix:** standard repository commit f58eaba. `blind(out=...)` writes to the path it is given, the test passes a temporary path, and the tracked file is written only by `python detective.py blind` run on purpose.
+- **State:** solved. A fresh clone at f58eaba is clean. The owner's working copy still holds a date-only change to that file from earlier test runs; restoring it is the owner's yes (rule 14).
