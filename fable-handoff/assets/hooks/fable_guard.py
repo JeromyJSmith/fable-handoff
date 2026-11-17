@@ -202,6 +202,9 @@ class Protected:
         return None
 
 
+COMPANION_ROOTS = []
+
+
 def load_config(project):
     with open(os.path.join(project, "fable", "handoff.json"), encoding="utf-8") as handle:
         config = json.load(handle)
@@ -217,6 +220,13 @@ def load_config(project):
             blocked.append((pattern, re.compile(pattern, re.IGNORECASE)))
         except (re.error, TypeError) as error:
             raise ValueError("invalid regex %r in blocked_bash_patterns: %s" % (pattern, error))
+    # Companion repositories: other git repositories one run works in on its
+    # own branch (for example a firm's app beside its data repository). Writes
+    # inside them are allowed; protected_paths apply inside them as well.
+    companions = config.get("companion_repositories") or []
+    if not isinstance(companions, list):
+        raise ValueError("companion_repositories must be a list")
+    COMPANION_ROOTS[:] = [os.path.realpath(os.path.expanduser(str(c.get("path")))) for c in companions if isinstance(c, dict) and c.get("path")]
     if config.get("allow_writes_outside_project", False) is True:
         return Protected(paths), blocked, True
     # Named files outside the project the owner's rules require the run to
@@ -247,6 +257,12 @@ def check_file_write(project, protected, allow_outside, path, base):
         full = os.path.realpath(os.path.join(base, os.path.expanduser(path)))
         if isinstance(allow_outside, list) and full in allow_outside:
             return
+        for root in COMPANION_ROOTS:
+            if full.startswith(root + os.sep):
+                reason = protected.match(os.path.relpath(full, root).replace(os.sep, "/"))
+                if reason:
+                    block("%s is protected in the companion repository %s: %s of fable/handoff.json." % (path, root, reason))
+                return
         block(
             "%s is outside the project, and this run may only write inside it." % path,
             "Keep new files, including scratch files, inside the project directory.",
@@ -596,6 +612,11 @@ def check_bash(project, protected, blocked, command, cwd):
                     block("the command would delete or move %s, which contains this project." % path)
                 rel = relative_to_project(project, expanded, base)
                 if rel is None:
+                    for root in COMPANION_ROOTS:
+                        crel = relative_to_project(root, expanded, base)
+                        if crel is not None and protected.match(crel, removes):
+                            block("the command would write to, move or delete %s, which is protected in the companion repository %s." % (path, root),
+                                  "Reading a protected file or copying it elsewhere is allowed. Changing it is not.")
                     continue
                 reason = protected.match(rel, removes)
                 if reason:

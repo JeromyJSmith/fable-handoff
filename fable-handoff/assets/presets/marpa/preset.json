@@ -5,8 +5,8 @@
  "operating_rules_section": "OPERATING_RULES_MARPA.md",
  "config": {
   "preset": "marpa",
-  "verify_command": "uv run pytest -q tests && uv run budget_backtest.py --check",
-  "verify_timeout_seconds": 3600,
+  "verify_command": "uv run pytest -q tests && (cd /Volumes/MARPA/apps/marpa-desk && bun run test) && test -f budget_backtest.py && uv run budget_backtest.py --check",
+  "verify_timeout_seconds": 5400,
   "question_system": {
    "type": "bcf",
    "path": "bcf/fable-questions.bcf"
@@ -173,14 +173,16 @@
    },
    {
     "name": "back-test",
-    "looks_at": "each past project estimated from the others and compared with its signed budget, for estimating settings",
-    "returns": "the estimating parameter that predicts best",
+    "looks_at": "each past project with a real budget: its budget generated from its drawing (takeoff times its own rates, fees from project settings) against the firm's real budget, line by line, by slot and in total; and, for estimating settings, each project estimated from the others",
+    "returns": "agreement within budget_tolerance, and every gap in plain words",
     "strength": "decisive",
     "status": "planned",
-    "test": "MARPA blind_benchmark.py; fable-handoff detective_backtest.py on the decided set",
+    "test": "budget_backtest.py --check",
     "project_sources": [
      "blind_benchmark.py",
-     "ndjson/raw/bench_*.ndjson"
+     "ndjson/raw/budget_line.ndjson",
+     "project_settings.yaml",
+     "vwx/out/vwx_geometry.duckdb"
     ]
    },
    {
@@ -597,6 +599,51 @@
    "\\bgh\\s+(issue|pr)\\s+(create|comment|edit|close)\\b",
    "\\brm\\b[^;&|\\n]*\\.writer\\.lock",
    "\\bwriter_lock\\.py\\s+(steal|break|force)\\b"
-  ]
+  ],
+  "companion_repositories": [
+   {
+    "path": "/Volumes/MARPA/apps/marpa-desk",
+    "branch": "fable/marpa-1",
+    "test_command": "bun run test",
+    "why": "the slimmed desk app is the product surface: intake, the budget and editing, through the Standards API"
+   }
+  ],
+  "launch_requires": {
+   "functions_built": [
+    "name match",
+    "drawing content",
+    "text on the drawing",
+    "budget match",
+    "rules and precedent",
+    "adjudication"
+   ],
+   "functions_first_tasks": [
+    "takeoff from geometry",
+    "spatial relationships",
+    "back-test"
+   ],
+   "files": [
+    "docs/standard/PRODUCT_GOALS.md",
+    "docs/standard/SYSTEM.md",
+    "vwx/WORKFLOW.md",
+    "vwx/FORMAT_NOTES.md",
+    "vwx/run_vwx.sh",
+    "intake.py",
+    "docs/standard/ESTIMATING_DESIGN.md",
+    "docs/standard/DESK_REVISION_PLAN.md"
+   ]
+  },
+  "budget_tolerance": {
+   "line_quantity": "quantity_tolerance per dimension (area 5%, length 5%, count exact, volume 10%)",
+   "line_total_pct": 10.0,
+   "slot_total_pct": 7.5,
+   "project_total_pct": 5.0,
+   "why": {
+    "line_total_pct": "a line's total is quantity times rate; with the quantity within 5% and the project's own rate, rounding and waste leave up to about 10% on one line",
+    "slot_total_pct": "over and under on lines in one slot partly cancel, so a slot is held tighter than a line",
+    "project_total_pct": "the firm prices to the total; a generated budget more than 5% off the real total would change a bid"
+   },
+   "status": "proposed by the preparing agent from MARPA's quantity tolerances; the owner confirms or changes them before launch"
+  }
  }
 }

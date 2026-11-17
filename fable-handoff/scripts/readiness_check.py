@@ -412,6 +412,58 @@ def check_detective(project, config):
     return rows + [("PASS", "cases", ", ".join("%d %s" % (n, v) for v, n in sorted(counts.items())))]
 
 
+def check_launch_requires(project, config):
+    """What the mission depends on: functions that must be built before launch,
+    functions the run builds as its first tasks, and files that must exist."""
+    req = config.get("launch_requires") or {}
+    if not req:
+        return []
+    funcs = {f.get("name"): f for f in config.get("detective_functions") or [] if isinstance(f, dict)}
+    problems = []
+    for name in req.get("functions_built") or []:
+        f = funcs.get(name)
+        if f is None:
+            problems.append("the mission depends on the function '%s', which is not registered" % name)
+        elif f.get("status") != "built":
+            problems.append("the mission depends on '%s', which is only %s; build it before launch" % (name, f.get("status")))
+    state = (project / "fable" / "STATE.md").read_text(encoding="utf-8", errors="replace").lower() if (project / "fable" / "STATE.md").exists() else ""
+    tasks = [line for line in state.splitlines() if line.strip().startswith("- [")]
+    for name in req.get("functions_first_tasks") or []:
+        if name not in funcs:
+            problems.append("the run must build '%s', which is not registered" % name)
+        elif funcs[name].get("status") != "built" and not any(name.lower() in t for t in tasks):
+            problems.append("'%s' is planned and no task in fable/STATE.md builds it; add it as one of the first tasks" % name)
+    for rel in req.get("files") or []:
+        path = Path(os.path.expanduser(rel))
+        if not (path if path.is_absolute() else project / rel).exists():
+            problems.append("the mission starts from %s, which does not exist yet" % rel)
+    if problems:
+        return [("FAIL", "launch requires", "%d problem(s): %s" % (len(problems), "; ".join(problems)))]
+    return [("PASS", "launch requires", "every function and file the mission depends on is in place or planned as a first task")]
+
+
+def check_companions(config):
+    """Each companion repository exists, is on its own run branch (never a release branch) and is clean."""
+    rows = []
+    for c in config.get("companion_repositories") or []:
+        root = Path(os.path.expanduser(str(c.get("path", ""))))
+        label = "companion %s" % root.name
+        if not (root / ".git").exists():
+            rows.append(("FAIL", label, "%s is not a git repository on this machine" % root))
+            continue
+        branch = git(root, "branch", "--show-current").stdout.strip()
+        wanted = str(c.get("branch") or "")
+        if not wanted:
+            rows.append(("FAIL", label, "no branch is named for it in companion_repositories"))
+        elif branch.lower() in RELEASE_BRANCHES or branch != wanted:
+            rows.append(("FAIL", label, "on %s; the run writes it only on its own branch. Switch first: git -C %s switch -c %s" % (branch or "a detached HEAD", root, wanted)))
+        elif dirty_paths(root):
+            rows.append(("FAIL", label, "uncommitted changes: %s. Commit them first, so the run's diff there shows only its work." % short_list(dirty_paths(root))))
+        else:
+            rows.append(("PASS", label, "on %s, clean; tests: %s" % (branch, c.get("test_command") or "none named")))
+    return rows
+
+
 def check_git_branch(project, config):
     if git(project, "rev-parse", "--is-inside-work-tree").returncode != 0:
         return False, [("FAIL", "git branch", "the project is not a git repository. Run git init and commit, so that the run can be reviewed and undone.")]
@@ -732,6 +784,8 @@ def main():
     rows += check_decisions(project)
     rows += check_questions(project, config)
     rows += check_detective(project, config)
+    rows += check_launch_requires(project, config)
+    rows += check_companions(config)
     rows += branch_rows
     if is_repo:
         rows += check_git_clean(dirty_before, dirty_after, args.allow_dirty)

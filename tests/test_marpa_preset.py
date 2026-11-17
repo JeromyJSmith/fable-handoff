@@ -76,9 +76,9 @@ def test_init_with_the_marpa_preset_writes_marpas_configuration(tmp_path):
     # the command line wins over the preset: conftest's init passed its own verify command
     assert cfg["verify_command"] != PRESET["config"]["verify_command"]
     mission = (project / "fable/MISSION.md").read_text()
-    assert mission.index("## MARPA") < mission.index("\n## Done") and "class-word grammar" in mission
+    assert mission.index("## MARPA") < mission.index("\n## Done") and "Class-word grammar" in (project / "fable/OPERATING_RULES.md").read_text()
     # the owner's product direction: takeoff, the back-test against real budgets, Solomon, intake to budget, two repositories
-    for words in ["Takeoff from geometry", "budget_backtest.py --check", "marpa_solomon_2605", "Intake ends in the budget", "a second run"]:
+    for words in ["Takeoff from geometry", "budget_backtest.py --check", "marpa_solomon_2605", "Intake ends in the budget", "companion repository", "PRODUCT_GOALS.md", "s01_decode", "drawn against budgeted"]:
         assert words in mission, words
     rules = (project / "fable/OPERATING_RULES.md").read_text()
     assert rules.rstrip().endswith("Never a bare decision number.") and "writer_lock.py take" in rules
@@ -89,7 +89,10 @@ def test_the_preset_verify_command_is_used_when_none_is_given(tmp_path):
     proc = run([*script("init_handoff.py"), "--project", str(project), "--preset", "marpa", "--apply-settings"])
     assert proc.returncode == 0, proc.stderr
     cfg = read_cfg(project)
-    assert cfg["verify_command"] == "uv run pytest -q tests && uv run budget_backtest.py --check" and cfg["verify_timeout_seconds"] == 3600
+    assert cfg["verify_command"] == "uv run pytest -q tests && (cd /Volumes/MARPA/apps/marpa-desk && bun run test) && test -f budget_backtest.py && uv run budget_backtest.py --check"
+    assert cfg["verify_timeout_seconds"] == 5400
+    tol = cfg["budget_tolerance"]
+    assert tol["line_total_pct"] == 10.0 and tol["project_total_pct"] == 5.0 and set(tol["why"]) == {"line_total_pct", "slot_total_pct", "project_total_pct"}
 
 
 def test_an_unknown_preset_is_refused_and_writes_nothing(tmp_path):
@@ -411,3 +414,62 @@ def test_the_guard_lets_the_run_write_marpas_task_log_and_nothing_else_outside(t
         assert proc.returncode == 2 and "protected" in proc.stderr, path
     proc = hook(project, "fable_guard.py", {"tool_name": "Bash", "tool_input": {"command": "pxt schema update"}, "cwd": str(project)})
     assert proc.returncode == 2
+
+
+# --------------------------------------------------------------------------- launch requirements and the companion repository
+
+def test_readiness_refuses_a_launch_whose_required_functions_or_files_are_missing(tmp_path):
+    from conftest import prepared_project
+    project = prepared_project(tmp_path)
+    funcs = [dict(f, project_sources=["src/*.py"]) for f in marpa_config()["detective_functions"]]
+    req = marpa_config()["launch_requires"]
+    write_cfg(project, detective_functions=funcs, launch_requires=req)
+    commit_all(project, "requires")
+    _, data = readiness(project)
+    row = next(r for r in data["rows"] if r["check"] == "launch requires")
+    assert row["status"] == "FAIL"
+    assert "docs/standard/PRODUCT_GOALS.md, which does not exist yet" in row["detail"]
+    assert "'takeoff from geometry' is planned and no task in fable/STATE.md builds it" in row["detail"]
+    # a required function that is only planned stops the launch
+    write_cfg(project, launch_requires=dict(req, functions_built=["spatial relationships"], files=[], functions_first_tasks=[]))
+    commit_all(project, "planned required")
+    _, data = readiness(project)
+    assert "'spatial relationships', which is only planned; build it before launch" in next(r for r in data["rows"] if r["check"] == "launch requires")["detail"]
+    # files in place and the planned functions as first tasks: it passes
+    for rel in req["files"]:
+        (project / rel).parent.mkdir(parents=True, exist_ok=True)
+        (project / rel).write_text("x\n")
+    state = (project / "fable/STATE.md").read_text().replace("## Tasks\n", "## Tasks\n\n- [ ] Build takeoff from geometry\n- [ ] Build spatial relationships\n- [ ] Build back-test against real budgets\n", 1)
+    (project / "fable/STATE.md").write_text(state)
+    write_cfg(project, launch_requires=req)
+    commit_all(project, "ready")
+    _, data = readiness(project)
+    assert statuses(data)["launch requires"] == "PASS", next(r for r in data["rows"] if r["check"] == "launch requires")
+
+
+def test_the_companion_repository_must_be_on_its_run_branch_and_clean_and_the_guard_covers_it(tmp_path):
+    from conftest import hook, prepared_project
+    project = prepared_project(tmp_path)
+    desk = bare_project(tmp_path, "desk")
+    (desk / "tokens.css").write_text(":root{}\n")
+    commit_all(desk, "tokens")
+    write_cfg(project, companion_repositories=[{"path": str(desk), "branch": "fable/marpa-1", "test_command": "bun run test"}],
+              protected_paths=read_cfg(project)["protected_paths"] + ["tokens.css"])
+    commit_all(project, "companion")
+    _, data = readiness(project)
+    row = next(r for r in data["rows"] if r["check"] == "companion desk")
+    assert row["status"] == "FAIL" and "on main" in row["detail"] and "switch -c fable/marpa-1" in row["detail"]
+    git(desk, "switch", "-qc", "fable/marpa-1")
+    (desk / "loose.txt").write_text("x\n")
+    _, data = readiness(project)
+    assert "uncommitted changes" in next(r for r in data["rows"] if r["check"] == "companion desk")["detail"]
+    (desk / "loose.txt").unlink()
+    _, data = readiness(project)
+    assert statuses(data)["companion desk"] == "PASS"
+    ok = hook(project, "fable_guard.py", {"tool_name": "Write", "tool_input": {"file_path": str(desk / "src" / "Budget.tsx")}, "cwd": str(project)})
+    assert ok.returncode == 0, ok.stderr
+    for target in [desk / "tokens.css", desk / ".git" / "config"]:
+        no = hook(project, "fable_guard.py", {"tool_name": "Edit", "tool_input": {"file_path": str(target)}, "cwd": str(project)})
+        assert no.returncode == 2 and "companion repository" in no.stderr, target
+    no = hook(project, "fable_guard.py", {"tool_name": "Bash", "tool_input": {"command": "echo x > %s" % (desk / "tokens.css")}, "cwd": str(project)})
+    assert no.returncode == 2

@@ -37,16 +37,18 @@ The standard files (MARPA_STANDARD.md, the class vocabulary, the master slots) a
 
 The framework is [disler/ten-levels-of-jev](https://github.com/disler/ten-levels-of-jev): Jev answers one typed question (yes or no, a choice among listed options, or a score), returns a probability, and code owns the threshold. Its ten levels:
 
-1. Single decisions: one yes or no question as a smart if statement.
-2. Multiple choice: one option from a declared list, several questions in one call.
-3. Composite scoring: one score per factor, weights kept in code.
-4. Confidence gating: the answer says what, the confidence says whether. A floor below which a person decides, a bar above which the action runs.
-5. Intent and model routing: one cheap decision in front of expensive work.
-6. Guardrail hooks: Jev in the tool call hook.
-7. Should I compact: questions after every turn.
-8. Cheap reads: a judgment about a file, never the file.
-9. Files at scale: the same questions over many files in parallel.
-10. Agentic Jev: the agent writes its own questions.
+| Level | In one sentence | Where it lives in the skill now |
+| --- | --- | --- |
+| 1. Single decisions | One yes or no question, with the threshold in code. | Companion questions in an adjudication record (`detective.py` `adjudication_problems`, `escalate_noul`). |
+| 2. Multiple choice | One option from a declared list; several questions in one call. | The adjudication answer must be one of `offered`; the abstain exit `OTHER` is never applied (`adjudication_problems`). MARPA asks the choice and its companions in one call (`jev_schema.ask`). |
+| 3. Composite scoring | One score per factor, weights kept in code. | Not used: a case's verdict comes from written rules over evidence strength (`detective.verdict`), not a weighted score. The handoff keeps those rules fixed. |
+| 4. Confidence gating | The answer says what, the confidence says whether: a floor and a bar. | `detective.py` `adjudication_band` (auto, review, low) and `threshold`; the bar is measured by `detective_backtest.py` `calibrate` with `--min-accepted`. |
+| 5. Intent and model routing | One cheap decision in front of expensive work. | The verdict routes each case: settled and fact cases stay in the queue, only open policy reaches the BCF file (`detective.verdict`, `questions.py` routing); `preflight.py` `triage_question` sorts questions first. The subagent models in `assets/agents/` route work by cost. |
+| 6. Guardrail hooks | Jev in the tool call hook, unseen by the agent. | The guard hook `fable_guard.py` is rule based (protected paths, blocked commands, companion repositories). A Jev judgment there is planned, not built: hooks must stay standard library only. |
+| 7. Should I compact | Questions after every turn about whether the context moved on. | Does not apply: Claude Code compacts on its own, and `fable_session_context.py` restores the mission after compaction. |
+| 8. Cheap reads | A judgment about a file without loading it. | Not built. It would fit the evidence ladder (asking whether a sheet export names a class); planned. |
+| 9. Files at scale | The same questions over many files in parallel. | Not built in the skill; MARPA's own `preflight_jev.py` asks Jev per class over every project. |
+| 10. Agentic Jev | The agent writes its own questions. | Deliberately not allowed for decisions: no schema, no call (MARPA rule 5). A run may only ask schemas written in `jev_schemas.yaml`, which the guard protects. |
 
 Its rules: one snap judgment per question; ask every question in one call (fan out); numbers stay in code; confidence is a second axis; give the model an exit option; describe situations, not degrees; questions and thresholds in one reviewable file; send only the state the question needs; a second call only for a real dependency; prune options in code.
 
@@ -75,11 +77,16 @@ Run on 2026-11-16 against the 37 classes the owner has ruled on, exported from M
 | budget match | 28 | 5 | 0.179 |
 | rules and precedent (other rules, once the case's own ruling is hidden) | 20 | 2 | 0.100 |
 
-| Jev cutoff | Accepted | Right | Accuracy |
-| --- | --- | --- | --- |
-| 0.50 | 37 | 32 | 0.865 |
-| 0.70 | 36 | 32 | 0.889 |
-| 0.90 | 34 | 31 | 0.912 |
+| Jev cutoff | Accepted | Right | Wrong | Accuracy | 95% lower bound |
+| --- | --- | --- | --- | --- | --- |
+| 0.50 | 37 | 32 | 5 | 0.865 | 0.72 |
+| 0.60 | 37 | 32 | 5 | 0.865 | 0.72 |
+| 0.70 | 36 | 32 | 4 | 0.889 | 0.75 |
+| 0.80 | 36 | 32 | 4 | 0.889 | 0.75 |
+| 0.88 | 35 | 32 | 3 | 0.914 | 0.78 |
+| 0.90 | 34 | 31 | 3 | 0.912 | 0.77 |
+
+**Is 37 enough?** No. At 0.90, 31 of 34 right is 91%, but with so few cases the true rate could be as low as 77% (95% Wilson interval). The difference between 0.88 and 0.90 is one answer at exactly 0.88. To show at least 90% with confidence needs about 100 accepted answers with no more than 5 wrong. No class has been ruled since the 37 (class_rulings.yaml still holds 37 on 2026-11-17); each new ruling is added by running the export again.
 
 Calibrated threshold: **0.88**, the lowest confidence at which at least 10 answers were at least 90% right. MARPA's own blind test, which steps in tenths, gives 0.90; both accept the same answers above 0.90.
 
@@ -96,7 +103,43 @@ uv run --script scripts/detective_backtest.py --project <project> --cases assets
 
 ## Two repositories
 
-A handoff prepares one project. This preset's project is the standard repository (API, takeoff, pricing, back-test). The desk app (`/Volumes/MARPA/apps/marpa-desk`) is its own repository, so its screens are a second run, prepared with this preset on that repository once the API holds; the mission lists it as out of scope. A preset variant for the desk repository is planned.
+The run's home is the standard repository: decoding, takeoff, pricing, the API and the back-test, on the run branch. The desk app is a companion repository (`companion_repositories` in handoff.json):
+
+- the readiness check refuses to launch unless the desk repository is on its own run branch (`fable/marpa-1`, never main) and has no uncommitted changes;
+- the guard allows writes inside it and applies the protected paths there too, for file tools and shell commands;
+- the verify command runs both test suites: `uv run pytest -q tests`, then `bun run test` in the desk, then the budget back-test.
+
+What is still missing for two repositories: the stop gate and the post-run review look only at the home repository's commits and diff; the desk's own CLAUDE.md is not audited unless it is passed with `audit_rules.py --extra`; and the launcher creates no branch, so the desk branch is made by hand before launch.
+
+## Launch requirements
+
+`launch_requires` in handoff.json makes the readiness check refuse a launch that depends on something missing:
+
+- must be built before launch: name match, drawing content, text on the drawing, budget match, rules and precedent, adjudication (all built in MARPA);
+- built by the run as its first tasks, each named in fable/STATE.md: takeoff from geometry, spatial relationships, the back-test against real budgets;
+- files the mission starts from: PRODUCT_GOALS.md, SYSTEM.md, the VWX workflow, format notes and runner, intake.py, the estimating design and the desk revision plan.
+
+## Budget tolerances
+
+`budget_tolerance` in handoff.json, proposed from MARPA's quantity tolerances; the owner confirms or changes them:
+
+| Level | Tolerance | Why |
+| --- | --- | --- |
+| A line's quantity | area 5%, length 5%, count exact, volume 10% | budgets round to whole units and add waste |
+| A line's total | 10% | quantity within 5% times the project's own rate, plus rounding |
+| A slot's total | 7.5% | over and under on lines in one slot partly cancel |
+| The project total | 5% | the firm prices to the total; more than 5% would change a bid |
+
+## Trial on a copy (2026-11-17)
+
+Init with `--preset marpa` and the readiness check on a scratch copy of the MARPA repository (the real one untouched). Passed: the configuration, the detective functions (every source found), the owner rules (all 13 honored), the guard, the hooks, the git branch. Failed, each for a real reason:
+
+- the mission, ledger and decisions files still hold their fill-in markers (the preparing agent writes them);
+- launch requirements: takeoff, spatial relationships and the back-test are not yet tasks in STATE.md, and PRODUCT_GOALS.md does not exist yet;
+- the desk repository is on main with uncommitted changes, so the companion check refuses;
+- the verify command could not run on the copy, because the copy left out the archive and vendor folders some tests read; on the real repository it fails until budget_backtest.py exists, as it should. The trial showed that a missing script reads as "cannot run" and would block the launch, so the verify command now checks `test -f budget_backtest.py` first: it fails quietly until the run writes the script.
+
+Warnings: ten lines in AGENTS.md name absolute paths (review, not a block), and no spending cap is set.
 
 ## Still planned
 
